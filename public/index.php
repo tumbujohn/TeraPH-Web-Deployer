@@ -130,6 +130,13 @@ $csrf     = csrf_token();
                                     Logs
                                 </button>
                                 <button
+                                    class="btn btn-ghost btn-sm btn-terminal"
+                                    data-project-id="<?= $project['id'] ?>"
+                                    data-project-name="<?= h($project['name']) ?>"
+                                >
+                                    >_ Terminal
+                                </button>
+                                <button
                                     class="btn btn-ghost btn-sm btn-backups"
                                     data-project-id="<?= $project['id'] ?>"
                                     data-project-name="<?= h($project['name']) ?>"
@@ -314,10 +321,33 @@ $csrf     = csrf_token();
     </div>
 </div>
 
+<!-- ======================================================================= -->
+<!-- WEB TERMINAL MODAL (Stateless Runner)                                    -->
+<!-- ======================================================================= -->
+<div class="modal-overlay" id="modal-web-terminal" data-static="true" hidden>
+    <div class="modal">
+        <div class="modal-header" style="background:#111; border-bottom:1px solid #333;">
+            <h3 class="modal-title" style="color:#e5e7eb;font-family:monospace;">>_ <span id="terminal-project-name">Terminal</span></h3>
+            <button class="modal-close" data-close="modal-web-terminal" style="color:#aaa;">✕</button>
+        </div>
+        <div class="modal-body">
+            <div id="terminal-log" class="terminal-log">
+                <!-- Executed outputs will land here -->
+                <div style="color: #888;">System Ready. Target configured.</div>
+            </div>
+            <div class="terminal-input-row">
+                <span class="terminal-prompt-icon">$</span>
+                <input type="text" id="terminal-input" class="terminal-input" placeholder="Type a command (e.g., composer dump-autoload) and press Enter..." autocomplete="off" spellcheck="false" />
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Pass CSRF token to JS -->
 <script>
     window.CSRF_TOKEN = <?= json_encode($csrf) ?>;
 </script>
 <script src="assets/js/app.js"></script>
+<script src="assets/js/terminal.js"></script>
 </body>
 </html>
