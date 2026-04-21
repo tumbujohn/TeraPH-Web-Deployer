@@ -87,21 +87,33 @@
     // Modal: close all on overlay click or [data-close] button
     // =========================================================================
     document.addEventListener('click', function (e) {
+        const overlay = e.target.closest('.modal-overlay');
+        if (!overlay) return;
+
         // Close button
         if (e.target.matches('[data-close]')) {
             closeModal(e.target.dataset.close);
+            return;
         }
+
         // Overlay background click
-        if (e.target.classList.contains('modal-overlay')) {
-            e.target.setAttribute('hidden', '');
+        if (e.target === overlay) {
+            // Prevent closing if modal is marked as static
+            if (overlay.dataset.static === 'true') {
+                // Subtle feedback: shake the modal or just ignore
+                return;
+            }
+            overlay.setAttribute('hidden', '');
         }
     });
 
-    // Escape key closes any open modal
+    // Escape key closes any open modal unless it's static
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
             document.querySelectorAll('.modal-overlay:not([hidden])').forEach(el => {
-                el.setAttribute('hidden', '');
+                if (el.dataset.static !== 'true') {
+                    el.setAttribute('hidden', '');
+                }
             });
         }
     });
@@ -158,18 +170,42 @@
             return fd;
         })()).then(r => { fetchResult = r; }).catch(e => { fetchError = e; });
 
-        // ---- Poll DB status every 3s in parallel ------------------------------
-        // This updates the progress subtitle and gives us the true outcome
-        // even if the fetch() connection drops before the response arrives.
+        // ---- Show/Reset Console ----------------------------------------------
+        const consoleEl = document.getElementById('deploy-console');
+        if (consoleEl) {
+            consoleEl.innerHTML = '<div class="log-entry"><span class="log-msg">Initializing pipeline...</span></div>';
+            consoleEl.removeAttribute('hidden');
+        }
+
+        // ---- Poll DB status & Logs incrementally ------------------------------
         let pollInterval = null;
         let finalStatus  = null;
+        let lastLogId    = 0;
+        let isAutoScroll = true;
+
+        // Smart scroll detection
+        consoleEl?.addEventListener('scroll', () => {
+            if (!consoleEl) return;
+            const threshold = 15; // px buffer
+            isAutoScroll = (consoleEl.scrollHeight - consoleEl.scrollTop - consoleEl.clientHeight) < threshold;
+        });
 
         pollInterval = setInterval(async () => {
             try {
+                // 1. Check status
                 const s = await get(`deploy.php?action=status&project_id=${projectId}`);
                 if (!s.success) return;
 
-                const { status, last_error } = s.data;
+                const { status, last_error, deployment_id } = s.data;
+
+                // 2. Fetch incrementally using deployment_id and lastLogId
+                const logResp = await get(`logs.php?deployment_id=${deployment_id}&since_id=${lastLogId}`);
+                if (logResp.success && consoleEl) {
+                    if (logResp.data.logs.length > 0) {
+                        appendLogsToContainer(logResp.data.logs, consoleEl, isAutoScroll);
+                        lastLogId = logResp.data.last_log_id;
+                    }
+                }
 
                 // Update the flying subtitle to show real progress
                 const labels = {
@@ -188,9 +224,9 @@
                 }
             } catch (_) {
                 // Polling failed (probably PHP single-process dev server is busy)
-                // Not fatal — we'll use the fetch() result when it returns
             }
-        }, 3000);
+        }, 2000); // Polling frequency increased to 2s for better response
+
 
         // ---- Wait for the pipeline fetch to complete --------------------------
         await deployFetch;
@@ -291,28 +327,53 @@
     });
 
     /**
-     * Renders log entries into the log viewer container.
-     * @param {Array} logs
+     * Renders log entries into the log viewer container (replaces content).
      */
     function renderLogs(logs) {
         const container = document.getElementById('logs-container');
         if (!logs || logs.length === 0) {
-            container.innerHTML = '<p class="log-loading">No log entries for this deployment.</p>';
+            container.innerHTML = '<p class="log-loading">No log entries found.</p>';
             return;
         }
 
-        container.innerHTML = '<div class="log-viewer">' +
-            logs.map(entry => `
-                <div class="log-entry">
-                    <span class="log-ts">${escapeHtml(entry.logged_at)}</span>
-                    <span class="log-level ${levelClass(entry.level)}">${escapeHtml(entry.level)}</span>
-                    <span class="log-msg">${escapeHtml(entry.message)}</span>
-                </div>
-            `).join('') +
-            '</div>';
+        container.innerHTML = logs.map(l => formatLogEntry(l)).join('');
+        container.scrollTop = container.scrollHeight;
+    }
 
-        // Scroll to bottom
-        container.querySelector('.log-viewer').scrollTop = 99999;
+    /**
+     * Appends logs to a container without wiping existing content.
+     * Implements auto-scroll logic.
+     */
+    function appendLogsToContainer(logs, container, shouldScroll) {
+        if (!logs || logs.length === 0) return;
+
+        // Remove cursor before appending
+        const cursor = container.querySelector('.console-cursor');
+        if (cursor) cursor.remove();
+
+        const html = logs.map(l => formatLogEntry(l)).join('');
+        container.insertAdjacentHTML('beforeend', html);
+        
+        // Re-add cursor
+        container.insertAdjacentHTML('beforeend', '<span class="console-cursor">█</span>');
+
+        if (shouldScroll) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+
+    /**
+     * Standard log entry HTML template.
+     */
+    function formatLogEntry(entry) {
+        const time = escapeHtml(entry.logged_at.split(' ')[1] || entry.logged_at);
+        return `
+            <div class="log-entry new-log">
+                <span class="log-ts">${time}</span>
+                <span class="log-level ${levelClass(entry.level)}">${escapeHtml(entry.level)}</span>
+                <span class="log-msg">${escapeHtml(entry.message)}</span>
+            </div>
+        `;
     }
 
     // =========================================================================

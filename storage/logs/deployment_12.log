@@ -1,3 +1,5 @@
 [2026-04-21 08:18:20] [INFO   ] Deployment started for project: test-appp (mode: safe)
 [2026-04-21 08:18:20] [INFO   ] Lock acquired.
 [2026-04-21 08:18:20] [INFO   ] Downloading archive from GitHub (branch: main)...
+[2026-04-21 08:22:34] [ERROR  ] PIPELINE ERROR: Download failed (HTTP 200). URL: https://api.github.com/repos/tumbujohn/Jongo-Contacts/zipball/main. Error: HTTP/2 stream 1 was not closed cleanly: CANCEL (err 8)
+[2026-04-21 08:22:34] [INFO   ] Deployment halted. Lock released.

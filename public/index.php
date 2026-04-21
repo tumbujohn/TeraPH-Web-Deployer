@@ -278,12 +278,16 @@ $csrf     = csrf_token();
 <!-- ======================================================================= -->
 <!-- DEPLOY PROGRESS OVERLAY                                                  -->
 <!-- ======================================================================= -->
-<div class="modal-overlay" id="modal-deploying" hidden>
-    <div class="modal">
+<div class="modal-overlay" id="modal-deploying" data-static="true" hidden>
+    <div class="modal modal-lg">
         <div class="modal-body text-center">
             <div class="spinner"></div>
             <h3 class="deploy-status-title" id="deploy-status-title">Deploying…</h3>
             <p class="deploy-status-sub" id="deploy-status-sub">Please wait while the pipeline runs.</p>
+            
+            <div id="deploy-console" class="console-view" hidden>
+                <!-- Real-time logs will be streamed here -->
+            </div>
         </div>
     </div>
 </div>

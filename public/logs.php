@@ -35,9 +35,11 @@ if (!$deployment) {
     json_error('Deployment not found.', 404);
 }
 
-$logs = DeploymentLog::forDeployment($deploymentId);
+$sinceId = (int) ($_GET['since_id'] ?? 0);
+$logs    = DeploymentLog::forDeployment($deploymentId, $sinceId);
 
 json_ok([
-    'deployment' => $deployment,
-    'logs'       => $logs,
+    'deployment'   => $deployment,
+    'logs'         => $logs,
+    'last_log_id'  => !empty($logs) ? (int) end($logs)['id'] : $sinceId,
 ]);

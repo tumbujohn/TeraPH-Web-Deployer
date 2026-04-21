@@ -45,18 +45,23 @@ class DeploymentLog
 
     /**
      * Returns all log entries for a given deployment, oldest first.
+     * Optionally filters entries after a specific log ID.
      *
      * @return array<int, array<string, mixed>>
      */
-    public static function forDeployment(int $deploymentId): array
+    public static function forDeployment(int $deploymentId, int $sinceId = 0): array
     {
         $pdo  = Database::connect();
         $stmt = $pdo->prepare("
             SELECT * FROM deployment_logs
             WHERE deployment_id = :deployment_id
+              AND id > :since_id
             ORDER BY logged_at ASC, id ASC
         ");
-        $stmt->execute([':deployment_id' => $deploymentId]);
+        $stmt->execute([
+            ':deployment_id' => $deploymentId,
+            ':since_id'      => $sinceId
+        ]);
         return $stmt->fetchAll();
     }
 
