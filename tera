@@ -1,0 +1,424 @@
+#!/usr/bin/env php
+<?php
+// =============================================================================
+// tera — TeraPH Web Deployer CLI
+// =============================================================================
+// Usage:
+//   php tera serve                 Start the dev server on localhost:8000
+//   php tera serve 8080            Start on a custom port
+//   php tera migrate               Run all pending migrations
+//   php tera make:password         Hash a password for config.php
+//   php tera github:test <project> Diagnose GitHub download for a project
+//   php tera help                  Show this help text
+// =============================================================================
+
+define('TERA_ROOT', __DIR__);
+
+// ---- Resolve command --------------------------------------------------------
+$command = $argv[1] ?? 'help';
+$arg     = $argv[2] ?? null;
+
+// ---- Commands ---------------------------------------------------------------
+match ($command) {
+
+    'serve' => cmd_serve($arg),
+
+    'migrate' => cmd_migrate(),
+
+    'make:password' => cmd_make_password($arg),
+
+    'github:test' => cmd_github_test($arg),
+
+    'deploy:reconcile' => cmd_deploy_reconcile(),
+
+    'help', '--help', '-h' => cmd_help(),
+
+    default => (function () use ($command) {
+        echo red("Unknown command: {$command}\n");
+        echo "Run " . cyan("php tera help") . " for a list of commands.\n";
+        exit(1);
+    })(),
+};
+
+// =============================================================================
+// Command implementations
+// =============================================================================
+
+/**
+ * Start PHP built-in dev server pointed at /public
+ */
+function cmd_serve(?string $port): void
+{
+    $port = $port ?? '8000';
+
+    if (!is_numeric($port) || (int)$port < 1024 || (int)$port > 65535) {
+        echo red("Invalid port: {$port}. Must be between 1024 and 65535.\n");
+        exit(1);
+    }
+
+    $root    = TERA_ROOT;
+    $docRoot = $root . DIRECTORY_SEPARATOR . 'public';
+    $router  = $root . DIRECTORY_SEPARATOR . 'server.php';
+    $addr    = "localhost:{$port}";
+
+    if (!is_dir($docRoot)) {
+        echo red("Document root not found: {$docRoot}\n");
+        exit(1);
+    }
+
+    echo "\n";
+    echo cyan("  ⚡ TeraPH Web Deployer — Dev Server\n");
+    echo dim("  ─────────────────────────────────────\n");
+    echo "  " . green("→") . " URL:     " . cyan("http://{$addr}") . "\n";
+    echo "  " . green("→") . " Root:    " . dim($docRoot) . "\n";
+    echo "  " . green("→") . " PHP:     " . dim(PHP_VERSION) . "\n";
+    echo dim("  ─────────────────────────────────────\n");
+    echo dim("  Press Ctrl+C to stop.\n\n");
+
+    // Build command: use router script if it exists, else serve bare
+    $routerFlag = file_exists($router) ? " \"{$router}\"" : '';
+    $cmd        = sprintf(
+        'php -S %s -t "%s"%s',
+        $addr,
+        $docRoot,
+        $routerFlag
+    );
+
+    passthru($cmd, $exitCode);
+    exit($exitCode);
+}
+
+/**
+ * Run all migration files in /migrations in order
+ */
+function cmd_migrate(): void
+{
+    echo "\n" . cyan("  Running migrations...\n\n");
+
+    // Bootstrap config + DB (no session needed)
+    require_once TERA_ROOT . '/app/bootstrap.php';
+
+    $migrationsDir = TERA_ROOT . '/migrations';
+    $files         = glob($migrationsDir . '/*.php');
+
+    if (empty($files)) {
+        echo dim("  No migration files found.\n\n");
+        exit(0);
+    }
+
+    sort($files);
+
+    foreach ($files as $file) {
+        $name = basename($file);
+        echo "  " . dim("→ {$name} ... ");
+
+        ob_start();
+        require $file;
+        $output = trim(ob_get_clean());
+
+        echo green("done") . "\n";
+        if ($output) {
+            echo dim("    {$output}\n");
+        }
+    }
+
+    echo "\n" . green("  ✓ All migrations applied.\n\n");
+}
+
+/**
+ * Generate a bcrypt hash from a plain-text password
+ */
+function cmd_make_password(?string $password): void
+{
+    if (empty($password)) {
+        echo "Enter password to hash: ";
+        $password = trim(fgets(STDIN));
+    }
+
+    if (strlen($password) < 6) {
+        echo red("Password must be at least 6 characters.\n");
+        exit(1);
+    }
+
+    $hash = password_hash($password, PASSWORD_BCRYPT);
+
+    echo "\n";
+    echo cyan("  Generated bcrypt hash:\n\n");
+    echo "  " . green($hash) . "\n\n";
+    echo dim("  Place this in config.php as APP_PASSWORD_HASH.\n\n");
+}
+
+/**
+ * Scan all deployments, fix stuck 'running' ones, report their real outcome
+ */
+function cmd_deploy_reconcile(): void
+{
+    require_once TERA_ROOT . '/app/bootstrap.php';
+
+    $pdo = Database::connect();
+
+    // Find all deployments still in 'running' state
+    $stmt = $pdo->prepare("
+        SELECT d.id, d.project_id, d.started_at, p.name AS project_name
+        FROM deployments d
+        JOIN projects p ON p.id = d.project_id
+        WHERE d.status = 'running'
+        ORDER BY d.started_at ASC
+    ");
+    $stmt->execute();
+    $stuck = $stmt->fetchAll();
+
+    echo "\n";
+    echo cyan("  Deploy Reconcile\n");
+    echo dim("  -------------------------------------------------\n\n");
+
+    if (empty($stuck)) {
+        echo green("  No stuck deployments found. All statuses are clean.\n\n");
+        return;
+    }
+
+    echo "  Found " . count($stuck) . " stuck deployment(s):\n\n";
+
+    $fixed = 0;
+    foreach ($stuck as $dep) {
+        $depId   = (int) $dep['id'];
+        $project = $dep['project_name'];
+        $started = $dep['started_at'];
+
+        // Find last log entry for context
+        $logStmt = $pdo->prepare("
+            SELECT level, message FROM deployment_logs
+            WHERE deployment_id = :id
+            ORDER BY id DESC
+            LIMIT 1
+        ");
+        $logStmt->execute([':id' => $depId]);
+        $lastLog = $logStmt->fetch();
+
+        $lastMsg = $lastLog ? "[{$lastLog['level']}] {$lastLog['message']}" : 'No log entries.';
+
+        printf("  %-4s %-20s  started: %s\n", "#{$depId}", $project, $started);
+        echo dim("        Last log: {$lastMsg}\n");
+
+        // Mark as failed
+        $upd = $pdo->prepare("
+            UPDATE deployments
+            SET status = 'failed', finished_at = :now
+            WHERE id = :id
+        ");
+        $upd->execute([':now' => date('Y-m-d H:i:s'), ':id' => $depId]);
+
+        // Add a reconcile log entry
+        $logInsert = $pdo->prepare("
+            INSERT INTO deployment_logs (deployment_id, level, message, logged_at)
+            VALUES (:dep_id, 'WARNING', 'Deployment marked failed by reconcile CLI (was stuck in running state).', :now)
+        ");
+        $logInsert->execute([':dep_id' => $depId, ':now' => date('Y-m-d H:i:s')]);
+
+        echo "        " . red("-> Marked as failed.\n\n");
+        $fixed++;
+    }
+
+    echo green("  Done. Fixed {$fixed} deployment(s).\n\n");
+}
+
+/**
+ * Diagnose GitHub PAT and download URL for a project
+ */
+function cmd_github_test(?string $projectName): void
+{
+    if (empty($projectName)) {
+        echo red("Usage: php tera github:test <project-name>\n");
+        exit(1);
+    }
+
+    require_once TERA_ROOT . '/app/bootstrap.php';
+
+    $project = Project::findByName($projectName);
+    if (!$project) {
+        echo red("Project not found: {$projectName}\n");
+        echo dim("Available projects:\n");
+        foreach (Project::all() as $p) {
+            echo dim("  - {$p['name']}\n");
+        }
+        exit(1);
+    }
+
+    $pat    = trim($project['github_pat'] ?? '') ?: trim(GITHUB_PAT);
+    $hasPat = !empty($pat);
+
+    // Build URLs
+    $repoUrl  = rtrim(preg_replace('/\.git$/', '', $project['repo_url']), '/');
+    $branch   = $project['branch'] ?? 'main';
+
+    // Parse owner/repo
+    preg_match('#github\.com[:/]([^/]+)/([^/]+)#', $repoUrl, $m);
+    $owner = $m[1] ?? '?';
+    $repo  = $m[2] ?? '?';
+
+    $apiUrl = "https://api.github.com/repos/{$owner}/{$repo}/zipball/{$branch}";
+    $zipUrl = "{$repoUrl}/archive/refs/heads/{$branch}.zip";
+    $useUrl = $hasPat ? $apiUrl : $zipUrl;
+
+    echo "\n";
+    echo cyan("  GitHub Diagnostic: {$projectName}\n");
+    echo dim("  -------------------------------------------------\n");
+    echo "  " . green("->") . " Repo:        " . $project['repo_url'] . "\n";
+    echo "  " . green("->") . " Owner/Repo:  {$owner}/{$repo}\n";
+    echo "  " . green("->") . " Branch:      {$branch}\n";
+    echo "  " . green("->") . " PAT prefix:  " . ($hasPat ? green('YES (' . substr($pat, 0, 10) . '...)') : red('NO -- public URL will be used')) . "\n";
+    echo "  " . green("->") . " Request URL: " . dim($useUrl) . "\n";
+    echo dim("  -------------------------------------------------\n\n");
+
+    // ---- Step 1: Verify the token itself is valid ---------------------------
+    if ($hasPat) {
+        echo dim("  [1/2] Checking if PAT is valid (GET /user)...\n");
+
+        $userResp = github_head('https://api.github.com/user', $pat);
+
+        if ($userResp['status'] === 200) {
+            // Decode the body to see who the token belongs to
+            $userBody = github_get_body('https://api.github.com/user', $pat);
+            $userJson = json_decode($userBody, true);
+            $login    = $userJson['login'] ?? 'unknown';
+            echo "        " . green("OK") . " — PAT is valid. Authenticated as: " . green($login) . "\n\n";
+        } elseif ($userResp['status'] === 401) {
+            echo "        " . red("FAIL") . " — PAT is invalid or expired (HTTP 401).\n";
+            echo dim("        -> Generate a new PAT at: https://github.com/settings/tokens\n\n");
+            exit(1);
+        } else {
+            echo "        " . red("WARN") . " — Unexpected HTTP {$userResp['status']} from /user.\n\n";
+        }
+    }
+
+    // ---- Step 2: Check repo access ------------------------------------------
+    $step = $hasPat ? "[2/2]" : "[1/1]";
+    echo dim("  {$step} Testing repo access ({$owner}/{$repo})...\n");
+
+    $repoResp = github_head($useUrl, $hasPat ? $pat : '');
+
+    $status  = $repoResp['status'];
+    $curlErr = $repoResp['error'];
+
+    $statusLabel = match (true) {
+        $status >= 200 && $status < 400 => green("HTTP {$status} -- OK"),
+        $status === 401                  => red("HTTP 401 -- Unauthorized (PAT scope missing)"),
+        $status === 403                  => red("HTTP 403 -- Forbidden (PAT has no access to this repo)"),
+        $status === 404                  => red("HTTP 404 -- Not found (private repo with bad PAT scope, or wrong URL)"),
+        $status === 0                    => red("HTTP 0   -- cURL error: {$curlErr}"),
+        default                          => red("HTTP {$status}"),
+    };
+
+    echo "        Result: {$statusLabel}\n\n";
+
+    if ($status >= 200 && $status < 400) {
+        echo green("  [OK] Access confirmed. Deployment should work.\n\n");
+    } else {
+        echo red("  [FAIL] Cannot access the repository.\n\n");
+
+        if ($status === 404 && $hasPat) {
+            echo "  Most likely cause for fine-grained PATs (github_pat_...):\n";
+            echo dim("    1. The PAT was not given access to this specific repository.\n");
+            echo dim("       Fix: GitHub -> Settings -> Developer Settings -> Fine-grained tokens\n");
+            echo dim("            -> Edit token -> Repository access -> add 'Jongo-Contacts'\n");
+            echo dim("            -> Permissions -> Contents -> Read-only\n\n");
+            echo "  Simplest alternative -- use a Classic PAT (ghp_...):\n";
+            echo dim("    GitHub -> Settings -> Developer Settings -> Personal access tokens\n");
+            echo dim("    -> Tokens (classic) -> Generate -> check the 'repo' scope\n\n");
+        } elseif (!$hasPat) {
+            echo dim("  -> Add a GitHub PAT to the project settings.\n\n");
+        }
+    }
+}
+
+// =============================================================================
+// Diagnostic cURL helpers (local to tera CLI only)
+// =============================================================================
+
+function github_curl_base(string $url, string $pat): \CurlHandle
+{
+    $headers = [
+        'User-Agent: TeraPH-Deployer/1.0',
+        'Accept: application/vnd.github+json',
+        'X-GitHub-Api-Version: 2022-11-28',
+    ];
+    if (!empty($pat)) {
+        $headers[] = 'Authorization: Bearer ' . $pat;
+    }
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL               => $url,
+        CURLOPT_FOLLOWLOCATION    => true,
+        CURLOPT_MAXREDIRS         => 10,
+        CURLOPT_TIMEOUT           => 30,
+        CURLOPT_RETURNTRANSFER    => true,
+        CURLOPT_HTTPHEADER        => $headers,
+        CURLOPT_SSL_VERIFYPEER    => CURL_SSL_VERIFY,
+        CURLOPT_SSL_VERIFYHOST    => CURL_SSL_VERIFY ? 2 : 0,
+        CURLOPT_UNRESTRICTED_AUTH => true,
+    ]);
+    return $ch;
+}
+
+/** Makes a range-limited GET (first 256 bytes) and returns ['status' => int, 'error' => string].
+ *  A range GET accurately simulates the actual download path, including redirect handling.
+ *  HEAD requests can return different status codes for redirect-based endpoints like /zipball/.
+ */
+function github_head(string $url, string $pat): array
+{
+    $ch = github_curl_base($url, $pat);
+    // Fetch only first 256 bytes — enough to confirm access without downloading the archive
+    curl_setopt($ch, CURLOPT_RANGE, '0-255');
+    curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error  = curl_error($ch);
+    curl_close($ch);
+    // 206 = Partial Content (range GET success), 200 = full response OK, both mean accessible
+    return ['status' => ($status === 206 ? 200 : $status), 'error' => $error];
+}
+
+/** Makes a GET request and returns the response body as a string */
+function github_get_body(string $url, string $pat): string
+{
+    $ch   = github_curl_base($url, $pat);
+    $body = curl_exec($ch);
+    curl_close($ch);
+    return is_string($body) ? $body : '';
+}
+
+
+
+/**
+ * Print help text
+ */
+function cmd_help(): void
+{
+    echo "\n";
+    echo cyan("  ⚡ TeraPH Web Deployer — CLI\n\n");
+    echo "  " . cyan("Usage:") . " php tera <command> [options]\n\n";
+    echo "  " . cyan("Commands:\n");
+    printf("    %-30s %s\n", green("serve [port]"),           "Start the PHP dev server (default port: 8000)");
+    printf("    %-30s %s\n", green("migrate"),                "Run all database migrations");
+    printf("    %-30s %s\n", green("make:password [pass]"),   "Hash a password for config.php");
+    printf("    %-30s %s\n", green("github:test <project>"),  "Diagnose GitHub PAT + download access");
+    printf("    %-30s %s\n", green("deploy:reconcile"),       "Fix deployments stuck in 'running' state");
+    printf("    %-30s %s\n", green("help"),                   "Show this help message");
+    echo "\n";
+    echo "  " . cyan("Examples:\n");
+    echo "    php tera serve\n";
+    echo "    php tera serve 8080\n";
+    echo "    php tera migrate\n";
+    echo "    php tera make:password mySecurePass\n";
+    echo "    php tera github:test jongo-contacts\n";
+    echo "\n";
+}
+
+// =============================================================================
+// Terminal color helpers
+// =============================================================================
+
+function cyan(string $s): string   { return "\033[96m{$s}\033[0m"; }
+function green(string $s): string  { return "\033[92m{$s}\033[0m"; }
+function red(string $s): string    { return "\033[91m{$s}\033[0m"; }
+function dim(string $s): string    { return "\033[90m{$s}\033[0m"; }

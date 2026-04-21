@@ -1,0 +1,5 @@
+[2026-04-21 02:39:03] [INFO   ] Deployment started for project: test-appp (mode: safe)
+[2026-04-21 02:39:04] [INFO   ] Lock acquired.
+[2026-04-21 02:39:04] [INFO   ] Downloading archive from GitHub...
+[2026-04-21 02:39:05] [ERROR  ] PIPELINE ERROR: Download failed (HTTP 404). URL: https://api.github.com/repos/tumbujohn/Jongo-Contacts/zipball/main. Error: The requested URL returned error: 404 (404 Not Found — check the repo URL and branch name; private repos require a PAT)
+[2026-04-21 02:39:05] [INFO   ] Deployment halted. Lock released.

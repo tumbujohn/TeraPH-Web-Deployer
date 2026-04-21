@@ -1,0 +1,53 @@
+<?php
+// =============================================================================
+// TeraPH Web Deployer — Configuration Template
+// =============================================================================
+// Copy this file to config.php and fill in all values.
+// NEVER commit config.php to version control.
+// =============================================================================
+
+// ---- Application ----
+define('APP_NAME', 'TeraPH Deployer');
+define('APP_URL', 'https://yourdomain.com/deployer'); // No trailing slash
+
+// ---- Authentication ----
+define('APP_USERNAME', 'admin');
+// Generate with: php -r "echo password_hash('yourpassword', PASSWORD_BCRYPT);"
+define('APP_PASSWORD_HASH', '');
+
+// ---- Session ----
+define('SESSION_NAME', 'tera_deployer_session');
+define('SESSION_TIMEOUT', 3600); // Idle timeout in seconds (default: 60 minutes)
+
+// ---- Database ----
+define('DB_DRIVER', 'sqlite'); // 'sqlite' or 'mysql'
+define('DB_PATH',  __DIR__ . '/storage/deployer.db'); // SQLite only
+define('DB_HOST',  'localhost');  // MySQL only
+define('DB_PORT',  '3306');       // MySQL only
+define('DB_NAME',  'deployer');   // MySQL only
+define('DB_USER',  'root');       // MySQL only
+define('DB_PASS',  '');           // MySQL only
+
+// ---- Storage ----
+define('STORAGE_PATH', __DIR__ . '/storage');
+define('BACKUP_PATH',  __DIR__ . '/storage/backups');
+define('TMP_PATH',     __DIR__ . '/storage/tmp');
+define('LOG_PATH',     __DIR__ . '/storage/logs');
+
+// ---- Deployment ----
+define('MAX_BACKUPS_PER_PROJECT', 10);  // Backups to retain per project
+define('DOWNLOAD_TIMEOUT',        300); // cURL download timeout (seconds)
+define('LOCK_TIMEOUT',            1200); // Stale lock auto-release (seconds)
+
+// ---- GitHub ----
+// Optional: personal access token for private repositories
+define('GITHUB_PAT', '');
+
+// ---- Webhook (Phase 2) ----
+define('WEBHOOK_SECRET', ''); // HMAC-SHA256 shared secret
+
+// ---- Development ----
+// Set to true on local/dev machines to bypass SSL certificate verification.
+// NEVER set this to true in production — it disables HTTPS security.
+define('DEV_MODE',        false);
+define('CURL_SSL_VERIFY', !DEV_MODE);

@@ -1,0 +1,3 @@
+[2026-04-21 08:18:20] [INFO   ] Deployment started for project: test-appp (mode: safe)
+[2026-04-21 08:18:20] [INFO   ] Lock acquired.
+[2026-04-21 08:18:20] [INFO   ] Downloading archive from GitHub (branch: main)...

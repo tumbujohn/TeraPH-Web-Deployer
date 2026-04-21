@@ -1,0 +1,3 @@
+# Block direct web access to migrations
+Order allow,deny
+Deny from all
