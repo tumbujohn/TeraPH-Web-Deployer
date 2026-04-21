@@ -1,5 +1,0 @@
-[2026-04-21 02:31:15] [INFO   ] Deployment started for project: test-appp (mode: safe)
-[2026-04-21 02:31:15] [INFO   ] Lock acquired.
-[2026-04-21 02:31:15] [INFO   ] Downloading archive from GitHub...
-[2026-04-21 02:31:16] [ERROR  ] PIPELINE ERROR: Download failed (HTTP 404). URL: https://github.com/tumbujohn/Jongo-Contacts/archive/refs/heads/main.zip. Error: The requested URL returned error: 404
-[2026-04-21 02:31:16] [INFO   ] Deployment halted. Lock released.

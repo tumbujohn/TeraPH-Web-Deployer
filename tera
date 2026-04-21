@@ -31,6 +31,10 @@ match ($command) {
 
     'deploy:reconcile' => cmd_deploy_reconcile(),
 
+    'clear:tmp'     => cmd_clear_dir('tmp', TERA_ROOT . '/storage/tmp'),
+    'clear:backups' => cmd_clear_dir('backups', TERA_ROOT . '/storage/backups'),
+    'clear:logs'    => cmd_clear_dir('logs', TERA_ROOT . '/storage/logs'),
+
     'help', '--help', '-h' => cmd_help(),
 
     default => (function () use ($command) {
@@ -403,6 +407,9 @@ function cmd_help(): void
     printf("    %-30s %s\n", green("make:password [pass]"),   "Hash a password for config.php");
     printf("    %-30s %s\n", green("github:test <project>"),  "Diagnose GitHub PAT + download access");
     printf("    %-30s %s\n", green("deploy:reconcile"),       "Fix deployments stuck in 'running' state");
+    printf("    %-30s %s\n", green("clear:tmp"),              "Clear the storage/tmp directory safely");
+    printf("    %-30s %s\n", green("clear:backups"),          "Clear the storage/backups directory");
+    printf("    %-30s %s\n", green("clear:logs"),             "Clear the storage/logs directory");
     printf("    %-30s %s\n", green("help"),                   "Show this help message");
     echo "\n";
     echo "  " . cyan("Examples:\n");
@@ -411,7 +418,44 @@ function cmd_help(): void
     echo "    php tera migrate\n";
     echo "    php tera make:password mySecurePass\n";
     echo "    php tera github:test jongo-contacts\n";
+    echo "    php tera clear:tmp\n";
     echo "\n";
+}
+
+/**
+ * Robustly deletes all contents inside a target directory while preserving the parent directory.
+ */
+function cmd_clear_dir(string $name, string $path): void
+{
+    echo "\n" . cyan("  Clearing {$name} directory...\n\n");
+    
+    if (!is_dir($path)) {
+        echo red("  [FAIL] Directory not found: {$path}\n\n");
+        return;
+    }
+
+    $count = 0;
+    $items = new \RecursiveIteratorIterator(
+        new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS),
+        \RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($items as $item) {
+        $realPath = $item->getRealPath();
+        // Prevent deleting structural .gitkeep or .htaccess inside storage
+        if ($item->isFile() && in_array($item->getFilename(), ['.gitignore', '.htaccess', '.gitkeep'])) {
+            continue;
+        }
+        
+        if ($item->isDir()) {
+            @rmdir($realPath);
+        } else {
+            @unlink($realPath);
+            $count++;
+        }
+    }
+    
+    echo green("  ✓ Done. Removed {$count} items from {$name}.\n\n");
 }
 
 // =============================================================================

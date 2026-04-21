@@ -1,5 +1,0 @@
-[2026-04-21 08:02:29] [INFO   ] Deployment started for project: test-appp (mode: safe)
-[2026-04-21 08:02:29] [INFO   ] Lock acquired.
-[2026-04-21 08:02:29] [INFO   ] Downloading archive from GitHub (branch: main)...
-[2026-04-21 08:04:29] [ERROR  ] PIPELINE ERROR: Download failed (HTTP 200). URL: https://api.github.com/repos/tumbujohn/Jongo-Contacts/zipball/main. Error: Operation timed out after 120035 milliseconds with 4710287 bytes received
-[2026-04-21 08:04:29] [INFO   ] Deployment halted. Lock released.
