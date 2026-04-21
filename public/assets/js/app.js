@@ -126,10 +126,11 @@
 
         const projectId   = e.target.dataset.projectId;
         const projectName = e.target.dataset.projectName;
+        const sourceType  = e.target.dataset.sourceType || 'github';
         const modeSelect  = document.querySelector(`.mode-select[data-project-id="${projectId}"]`);
         const mode        = modeSelect ? modeSelect.value : 'safe';
 
-        state.pendingDeploy = { projectId, projectName, mode };
+        state.pendingDeploy = { projectId, projectName, mode, sourceType };
 
         // Populate confirmation modal
         document.getElementById('confirm-project-name').textContent = projectName;
@@ -149,7 +150,7 @@
     // Deploy: confirm & run
     // =========================================================================
     document.getElementById('btn-confirm-deploy')?.addEventListener('click', async function () {
-        const { projectId, projectName, mode } = state.pendingDeploy;
+        const { projectId, projectName, mode, sourceType } = state.pendingDeploy;
         if (!projectId) return;
 
         closeModal('modal-deploy');
@@ -482,6 +483,30 @@
     });
 
     // =========================================================================
+    // Project Form: Source Type Toggle Logic
+    // =========================================================================
+    document.getElementById('p-source-type')?.addEventListener('change', function (e) {
+        const ghFields = document.getElementById('github-fields');
+        const ghPatField = document.getElementById('github-pat-field');
+        const manualUploadGroup = document.getElementById('manual-upload-group');
+        const isGithub = e.target.value === 'github';
+
+        if (isGithub) {
+            ghFields.removeAttribute('hidden');
+            ghPatField.removeAttribute('hidden');
+            manualUploadGroup.setAttribute('hidden', '');
+            document.getElementById('p-repo-url').setAttribute('required', 'required');
+            document.getElementById('p-branch').setAttribute('required', 'required');
+        } else {
+            ghFields.setAttribute('hidden', '');
+            ghPatField.setAttribute('hidden', '');
+            manualUploadGroup.removeAttribute('hidden');
+            document.getElementById('p-repo-url').removeAttribute('required');
+            document.getElementById('p-branch').removeAttribute('required');
+        }
+    });
+
+    // =========================================================================
     // Project Form: Add
     // =========================================================================
     document.getElementById('btn-add-project')?.addEventListener('click', openAddForm);
@@ -493,6 +518,10 @@
         document.getElementById('project-form-keep-pat').value    = '0';
         document.getElementById('p-github-pat').placeholder       = 'ghp_xxxxxxxxxxxxxxxx';
         document.getElementById('project-form').reset();
+        
+        // Trigger toggle logic
+        document.getElementById('p-source-type').dispatchEvent(new Event('change'));
+
         hideError('project-form-error');
         openModal('modal-project-form');
     }
@@ -517,8 +546,11 @@
         // When editing: set keep_pat=1 so a blank PAT field preserves the stored value
         document.getElementById('project-form-keep-pat').value    = '1';
         document.getElementById('p-name').value                   = p.name;
-        document.getElementById('p-repo-url').value               = p.repo_url;
-        document.getElementById('p-branch').value                 = p.branch;
+        
+        const sourceType = p.source_type || 'github';
+        document.getElementById('p-source-type').value            = sourceType;
+        document.getElementById('p-repo-url').value               = p.repo_url || '';
+        document.getElementById('p-branch').value                 = p.branch || 'main';
         document.getElementById('p-target-path').value            = p.target_path;
 
         // Parse safe_keep JSON back to comma-separated string
@@ -536,6 +568,9 @@
         document.getElementById('p-github-pat').placeholder = p.github_pat
             ? 'PAT saved — leave blank to keep, or enter a new one'
             : 'ghp_xxxxxxxxxxxxxxxx (none saved)';
+
+        // Trigger toggle logic
+        document.getElementById('p-source-type').dispatchEvent(new Event('change'));
 
         hideError('project-form-error');
         openModal('modal-project-form');

@@ -81,7 +81,11 @@ $csrf     = csrf_token();
                         <div class="project-card-header">
                             <div>
                                 <h2 class="project-name"><?= h($project['name']) ?></h2>
-                                <span class="project-branch">⎇ <?= h($project['branch']) ?></span>
+                                <?php if (($project['source_type'] ?? 'github') === 'manual'): ?>
+                                    <span class="project-branch">📦 Manual Upload</span>
+                                <?php else: ?>
+                                    <span class="project-branch">⎇ <?= h($project['branch']) ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="status-badge <?= h(status_class($lastStatus)) ?>">
                                 <?= h(status_label($lastStatus)) ?>
@@ -105,6 +109,7 @@ $csrf     = csrf_token();
                                     class="btn btn-primary btn-deploy"
                                     data-project-id="<?= $project['id'] ?>"
                                     data-project-name="<?= h($project['name']) ?>"
+                                    data-source-type="<?= h($project['source_type'] ?? 'github') ?>"
                                 >
                                     ▶ Deploy
                                 </button>
@@ -170,6 +175,7 @@ $csrf     = csrf_token();
                 <span class="confirm-label">Mode</span>
                 <strong id="confirm-mode">Safe</strong>
             </div>
+
             <div class="alert alert-danger" id="full-deploy-warning" hidden>
                 ⚠ <strong>Full Deploy</strong> will permanently delete all existing files in the target directory, including <code>.env</code> and user uploads. This cannot be undone.
             </div>
@@ -225,7 +231,7 @@ $csrf     = csrf_token();
             <button class="modal-close" data-close="modal-project-form">✕</button>
         </div>
         <div class="modal-body">
-            <form id="project-form" novalidate>
+            <form id="project-form" enctype="multipart/form-data" novalidate>
                 <input type="hidden" id="project-form-id" name="id" value="">
                 <!-- keep_pat=1 tells the server to preserve the existing PAT if this field is left blank -->
                 <input type="hidden" id="project-form-keep-pat" name="keep_pat" value="0">
@@ -237,14 +243,30 @@ $csrf     = csrf_token();
                 </div>
 
                 <div class="form-group">
-                    <label for="p-repo-url">GitHub Repository URL</label>
-                    <input type="url" id="p-repo-url" name="repo_url" class="form-control"
-                        placeholder="https://github.com/user/repo" required>
+                    <label for="p-source-type">Source Type</label>
+                    <select id="p-source-type" name="source_type" class="form-control">
+                        <option value="github">GitHub Repository</option>
+                        <option value="manual">Manual Zip Upload</option>
+                    </select>
                 </div>
 
-                <div class="form-group">
-                    <label for="p-branch">Branch</label>
-                    <input type="text" id="p-branch" name="branch" class="form-control" value="main" required>
+                <div id="manual-upload-group" class="form-group" hidden>
+                    <label for="p-archive">Upload Archive (.zip)</label>
+                    <input type="file" id="p-archive" name="archive" class="form-control" accept=".zip">
+                    <small class="form-hint">Uploading a new zip will overwrite the previously saved archive. You still need to click Deploy applied changes.</small>
+                </div>
+
+                <div id="github-fields">
+                    <div class="form-group">
+                        <label for="p-repo-url">GitHub Repository URL</label>
+                        <input type="url" id="p-repo-url" name="repo_url" class="form-control"
+                            placeholder="https://github.com/user/repo" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="p-branch">Branch</label>
+                        <input type="text" id="p-branch" name="branch" class="form-control" value="main" required>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -259,7 +281,7 @@ $csrf     = csrf_token();
                         placeholder=".env, uploads/, storage/">
                 </div>
 
-                <div class="form-group">
+                <div id="github-pat-field" class="form-group">
                     <label for="p-github-pat">GitHub PAT <span class="form-hint-inline">(optional, for private repos)</span></label>
                     <input type="password" id="p-github-pat" name="github_pat" class="form-control"
                         placeholder="ghp_xxxxxxxxxxxxxxxx" autocomplete="off">

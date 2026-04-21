@@ -22,9 +22,9 @@ class DeployService
     /**
      * Executes the full deployment pipeline.
      *
-     * @param  int    $projectId      Registered project ID
-     * @param  string $mode           'safe' or 'full'
-     * @param  string $triggeredBy    Username of the initiating admin
+     * @param  int     $projectId      Registered project ID
+     * @param  string  $mode           'safe' or 'full'
+     * @param  string  $triggeredBy    Username of the initiating admin
      * @return array{success: bool, deployment_id: int, message: string}
      */
     public function deploy(int $projectId, string $mode, string $triggeredBy): array
@@ -56,13 +56,28 @@ class DeployService
         $backupPath = null;
 
         try {
-            // ---- Step 2: Download repo zip ---------------------------------
-            // Clean up any orphaned partial zips from previous aborted deploys
-            $this->cleanOrphanTmpFiles($project['name']);
+            // ---- Step 2: Acquire zip archive -------------------------------
+            if (isset($project['source_type']) && $project['source_type'] === 'manual') {
+                DeploymentLog::info($deploymentId, "Using saved manual upload archive...");
+                
+                $archivePath = STORAGE_PATH . '/archives/project_' . $projectId . '.zip';
+                if (!file_exists($archivePath)) {
+                    throw new RuntimeException("No archive uploaded for this project yet. Please edit the project and upload a .zip file.");
+                }
+                
+                // Copy the archive to TMP_PATH to prevent modifications from affecting the saved source artifact
+                $zipPath = TMP_PATH . '/deploy_' . $projectId . '_' . time() . '.zip';
+                if (!copy($archivePath, $zipPath)) {
+                     throw new RuntimeException("Failed to copy manual archive to temporary build workspace.");
+                }
+            } else {
+                // Clean up any orphaned partial zips from previous aborted deploys
+                $this->cleanOrphanTmpFiles($project['name']);
 
-            $branch = $project['branch'] ?? 'main';
-            DeploymentLog::info($deploymentId, "Downloading archive from GitHub (branch: {$branch})...");
-            $zipPath = $this->github->download($project);
+                $branch = $project['branch'] ?? 'main';
+                DeploymentLog::info($deploymentId, "Downloading archive from GitHub (branch: {$branch})...");
+                $zipPath = $this->github->download($project);
+            }
 
             if (!file_exists($zipPath) || filesize($zipPath) < 100) {
                 throw new RuntimeException("Downloaded zip is missing or empty: {$zipPath}");

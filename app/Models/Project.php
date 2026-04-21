@@ -65,12 +65,13 @@ class Project
     {
         $pdo  = Database::connect();
         $stmt = $pdo->prepare("
-            INSERT INTO projects (name, repo_url, target_path, branch, safe_keep, github_pat, created_at)
-            VALUES (:name, :repo_url, :target_path, :branch, :safe_keep, :github_pat, :created_at)
+            INSERT INTO projects (name, source_type, repo_url, target_path, branch, safe_keep, github_pat, created_at)
+            VALUES (:name, :source_type, :repo_url, :target_path, :branch, :safe_keep, :github_pat, :created_at)
         ");
         $stmt->execute([
             ':name'        => $data['name'],
-            ':repo_url'    => $data['repo_url'],
+            ':source_type' => $data['source_type'] ?? 'github',
+            ':repo_url'    => $data['repo_url'] ?? '',
             ':target_path' => $data['target_path'],
             ':branch'      => $data['branch'] ?? 'main',
             ':safe_keep'   => $data['safe_keep'] ?? null,
@@ -98,6 +99,7 @@ class Project
             $stmt = $pdo->prepare("
                 UPDATE projects
                 SET name        = :name,
+                    source_type = :source_type,
                     repo_url    = :repo_url,
                     target_path = :target_path,
                     branch      = :branch,
@@ -108,7 +110,8 @@ class Project
             $stmt->execute([
                 ':id'          => $id,
                 ':name'        => $data['name'],
-                ':repo_url'    => $data['repo_url'],
+                ':source_type' => $data['source_type'] ?? 'github',
+                ':repo_url'    => $data['repo_url'] ?? '',
                 ':target_path' => $data['target_path'],
                 ':branch'      => $data['branch'] ?? 'main',
                 ':safe_keep'   => $data['safe_keep'] ?? null,
@@ -118,6 +121,7 @@ class Project
             $stmt = $pdo->prepare("
                 UPDATE projects
                 SET name        = :name,
+                    source_type = :source_type,
                     repo_url    = :repo_url,
                     target_path = :target_path,
                     branch      = :branch,
@@ -129,7 +133,8 @@ class Project
             $stmt->execute([
                 ':id'          => $id,
                 ':name'        => $data['name'],
-                ':repo_url'    => $data['repo_url'],
+                ':source_type' => $data['source_type'] ?? 'github',
+                ':repo_url'    => $data['repo_url'] ?? '',
                 ':target_path' => $data['target_path'],
                 ':branch'      => $data['branch'] ?? 'main',
                 ':safe_keep'   => $data['safe_keep'] ?? null,

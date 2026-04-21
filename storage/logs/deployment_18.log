@@ -1,0 +1,5 @@
+[2026-04-21 10:07:27] [INFO   ] Deployment started for project: test-appp (mode: safe)
+[2026-04-21 10:07:27] [INFO   ] Lock acquired.
+[2026-04-21 10:07:27] [INFO   ] Downloading archive from GitHub (branch: main)...
+[2026-04-21 10:07:39] [ERROR  ] PIPELINE ERROR: Download failed (HTTP 0). URL: https://api.github.com/repos/tumbujohn/Jongo-Contacts/zipball/main. Error: Could not resolve host: api.github.com
+[2026-04-21 10:07:39] [INFO   ] Deployment halted. Lock released.

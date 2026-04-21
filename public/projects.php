@@ -49,6 +49,15 @@ if ($action === 'create') {
     }
 
     $id = Project::create($data);
+    
+    // Handle manual archive upload if provided
+    $uploadError = handleManualArchiveUpload($id);
+    if ($uploadError) {
+        // Rollback creation
+        Project::delete($id);
+        json_error($uploadError, 422);
+    }
+
     json_ok(['id' => $id], "Project '{$data['name']}' created.");
 }
 
@@ -78,6 +87,13 @@ if ($action === 'update') {
     }
 
     Project::update($id, $data);
+
+    // Handle manual archive upload if provided (overwrites existing if any)
+    $uploadError = handleManualArchiveUpload($id);
+    if ($uploadError) {
+        json_error("Project updated, but archive upload failed: " . $uploadError, 422);
+    }
+
     json_ok(null, "Project '{$data['name']}' updated.");
 }
 
@@ -109,6 +125,7 @@ function sanitizeProjectInput(array $post): array
 {
     return [
         'name'        => trim($post['name']        ?? ''),
+        'source_type' => trim($post['source_type'] ?? 'github'),
         'repo_url'    => trim($post['repo_url']    ?? ''),
         'target_path' => trim($post['target_path'] ?? ''),
         'branch'      => trim($post['branch']      ?? 'main'),
@@ -131,10 +148,12 @@ function validateProjectInput(array $data): array
         $errors[] = 'Project name may only contain letters, numbers, hyphens, and underscores.';
     }
 
-    if (empty($data['repo_url'])) {
-        $errors[] = 'Repository URL is required.';
-    } elseif (!filter_var($data['repo_url'], FILTER_VALIDATE_URL)) {
-        $errors[] = 'Repository URL must be a valid HTTPS URL.';
+    if ($data['source_type'] === 'github') {
+        if (empty($data['repo_url'])) {
+            $errors[] = 'Repository URL is required for GitHub projects.';
+        } elseif (!filter_var($data['repo_url'], FILTER_VALIDATE_URL)) {
+            $errors[] = 'Repository URL must be a valid HTTPS URL.';
+        }
     }
 
     if (empty($data['target_path'])) {
@@ -142,4 +161,38 @@ function validateProjectInput(array $data): array
     }
 
     return $errors;
+}
+
+/**
+ * Handles the manual archive upload. 
+ * Returns an error string on failure, or null on success/skip.
+ */
+function handleManualArchiveUpload(int $projectId): ?string
+{
+    // Check if an archive was uploaded at all
+    if (!isset($_FILES['archive']) || $_FILES['archive']['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+
+    if ($_FILES['archive']['error'] !== UPLOAD_ERR_OK) {
+        return 'Upload failed with error code: ' . $_FILES['archive']['error'];
+    }
+
+    $ext = strtolower(pathinfo($_FILES['archive']['name'], PATHINFO_EXTENSION));
+    if ($ext !== 'zip') {
+        return 'Uploaded file must be a .zip archive.';
+    }
+
+    // Ensure archives directory exists
+    $archiveDir = STORAGE_PATH . '/archives';
+    if (!is_dir($archiveDir) && !mkdir($archiveDir, 0755, true)) {
+        return 'Server error: Cannot create archive storage directory.';
+    }
+
+    $destPath = $archiveDir . '/project_' . $projectId . '.zip';
+    if (!move_uploaded_file($_FILES['archive']['tmp_name'], $destPath)) {
+        return 'Server error: Failed to save uploaded archive.';
+    }
+
+    return null;
 }
