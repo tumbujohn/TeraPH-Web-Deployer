@@ -356,7 +356,19 @@ php test/bootstrap_test.php
 
 All checks should pass before using the panel in production.
 
-### 5. Log in and add projects
+### 5. Run Database Migrations
+
+You can run your database setups by SSH terminal or directly through the browser.
+
+Via SSH (if available):
+```bash
+php tera migrate
+```
+
+Via the browser (when SSH isn't available, e.g., standard cPanel):
+Simply navigate to your domain at `https://deploy.yourdomain.com/migrate.php`. It will prompt you to log in using the `APP_PASSWORD_HASH` defined in your `config.php`, securely run all unapplied migrations, and print the outputs onto the screen!
+
+### 6. Log in and add projects
 
 Open `https://deploy.yourdomain.com` and log in.
 
@@ -428,6 +440,11 @@ php tera <command> [options]
 | `php tera make:password mypass` | Hash a password non-interactively |
 | `php tera github:test <project>` | Two-step PAT diagnostic (validates token + repo access) |
 | `php tera deploy:reconcile` | Find and fix all deployments stuck in `running` state |
+| `php tera clear:tmp` | Safely clear the temporary cache directory |
+| `php tera clear:archives` | Clear old, manually-uploaded deployment ZIP files |
+| `php tera clear:backups` | Clear stored pre-deployment safe-keep backups |
+| `php tera clear:logs` | Clear the raw `/storage/logs` directory |
+| `php tera clear:all` | Sequentially run all the clearing sweeps simultaneously |
 | `php tera help` | Show all available commands |
 
 ### `github:test` details

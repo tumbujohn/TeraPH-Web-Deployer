@@ -31,9 +31,11 @@ match ($command) {
 
     'deploy:reconcile' => cmd_deploy_reconcile(),
 
-    'clear:tmp'     => cmd_clear_dir('tmp', TERA_ROOT . '/storage/tmp'),
-    'clear:backups' => cmd_clear_dir('backups', TERA_ROOT . '/storage/backups'),
-    'clear:logs'    => cmd_clear_dir('logs', TERA_ROOT . '/storage/logs'),
+    'clear:tmp'      => cmd_clear_dir('tmp', TERA_ROOT . '/storage/tmp'),
+    'clear:backups'  => cmd_clear_dir('backups', TERA_ROOT . '/storage/backups'),
+    'clear:logs'     => cmd_clear_dir('logs', TERA_ROOT . '/storage/logs'),
+    'clear:archives' => cmd_clear_dir('archives', TERA_ROOT . '/storage/archives'),
+    'clear:all'      => cmd_clear_all(),
 
     'help', '--help', '-h' => cmd_help(),
 
@@ -410,6 +412,8 @@ function cmd_help(): void
     printf("    %-30s %s\n", green("clear:tmp"),              "Clear the storage/tmp directory safely");
     printf("    %-30s %s\n", green("clear:backups"),          "Clear the storage/backups directory");
     printf("    %-30s %s\n", green("clear:logs"),             "Clear the storage/logs directory");
+    printf("    %-30s %s\n", green("clear:archives"),         "Clear uploaded zip archives");
+    printf("    %-30s %s\n", green("clear:all"),              "Clear all of the above storage directories");
     printf("    %-30s %s\n", green("help"),                   "Show this help message");
     echo "\n";
     echo "  " . cyan("Examples:\n");
@@ -418,8 +422,21 @@ function cmd_help(): void
     echo "    php tera migrate\n";
     echo "    php tera make:password mySecurePass\n";
     echo "    php tera github:test jongo-contacts\n";
-    echo "    php tera clear:tmp\n";
+    echo "    php tera clear:all\n";
     echo "\n";
+}
+
+/**
+ * Clears all temporary, backup, log, and archive directories
+ */
+function cmd_clear_all(): void
+{
+    cmd_clear_dir('tmp', TERA_ROOT . '/storage/tmp');
+    cmd_clear_dir('backups', TERA_ROOT . '/storage/backups');
+    cmd_clear_dir('logs', TERA_ROOT . '/storage/logs');
+    cmd_clear_dir('archives', TERA_ROOT . '/storage/archives');
+    
+    echo green("  ✓ All storage directories have been swept.\n\n");
 }
 
 /**
