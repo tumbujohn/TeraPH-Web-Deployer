@@ -16,6 +16,8 @@ Thumbs.db
 dist/
 build/
 
+# ignore db in storage
+storage/deployer.db
 
 # Ignore IDE and editor files
 
@@ -24,3 +26,4 @@ build/
 
 # Claude AI
 CLAUDE.md
+q

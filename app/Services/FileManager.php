@@ -77,20 +77,19 @@ class FileManager
         }
 
         // Normalise: strip leading/trailing slashes for reliable prefix matching
-        $skips = array_map(fn($p) => trim($p, '/'), $skipPaths);
+        $skips = array_map(fn($p) => trim(str_replace(DIRECTORY_SEPARATOR, '/', $p), '/'), $skipPaths);
 
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($sourceDir, RecursiveDirectoryIterator::SKIP_DOTS),
             RecursiveIteratorIterator::SELF_FIRST
         );
 
-        // Pre-compute source root length to slice relative paths from getRealPath().
-        // Uses getRealPath() on each item (instead of getSubPathname() on the iterator)
-        // to keep static analysis clean and normalize separators cross-platform.
-        $srcRootLen = strlen(realpath($sourceDir)) + 1;
+        // Resolve to real path so substring slicing matches getRealPath() output
+        // even when $sourceDir was constructed with symlinks or mixed separators.
+        $srcRootLen = strlen(rtrim(str_replace(DIRECTORY_SEPARATOR, '/', realpath($sourceDir) ?: $sourceDir), '/')) + 1;
 
         foreach ($iterator as $item) {
-            $relPath  = str_replace(DIRECTORY_SEPARATOR, '/', substr($item->getRealPath(), $srcRootLen));
+            $relPath  = ltrim(str_replace(DIRECTORY_SEPARATOR, '/', substr($item->getRealPath(), $srcRootLen)), '/');
             $destPath = $targetDir . '/' . $relPath;
 
             foreach ($skips as $skip) {
@@ -124,8 +123,13 @@ class FileManager
             return;
         }
 
-        // Normalise skip paths to absolute paths
-        $skipAbsolute = array_map(fn($p) => rtrim($dir . '/' . ltrim($p, '/'), '/'), $skipPaths);
+        // Resolve $dir to its real canonical path so the comparison always matches
+        // getRealPath() on each item, even when the webroot contains symlinks.
+        $realDir      = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', realpath($dir) ?: $dir), '/');
+        $skipAbsolute = array_map(
+            fn($p) => $realDir . '/' . trim(str_replace(DIRECTORY_SEPARATOR, '/', $p), '/'),
+            $skipPaths
+        );
 
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
@@ -133,11 +137,11 @@ class FileManager
         );
 
         foreach ($iterator as $item) {
-            $path = $item->getRealPath();
+            $path = str_replace(DIRECTORY_SEPARATOR, '/', $item->getRealPath());
 
             // Skip preserved paths and anything inside them
             foreach ($skipAbsolute as $skip) {
-                if (str_starts_with($path, $skip)) {
+                if ($path === $skip || str_starts_with($path, $skip . '/')) {
                     continue 2;
                 }
             }
