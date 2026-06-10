@@ -16,8 +16,9 @@ Thumbs.db
 dist/
 build/
 
-# ignore db in storage
+# ignore application-specific files
 storage/deployer.db
+/public/update.php
 
 # Ignore IDE and editor files
 
