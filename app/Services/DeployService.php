@@ -110,30 +110,21 @@ class DeployService
             }
 
             // ---- Step 6: Clear target directory ----------------------------
-            $targetDir  = $project['target_path'];
-            $skipPaths  = ($mode === 'safe') ? Project::getSafeKeepPaths($project) : [];
+            $targetDir = $project['target_path'];
+            $skipPaths = ($mode === 'safe') ? Project::getSafeKeepPaths($project) : [];
 
-            // Stash safe_keep files aside temporarily
-            $stashDir = null;
             if ($mode === 'safe' && !empty($skipPaths)) {
-                $stashDir = TMP_PATH . '/' . $project['name'] . '_stash_' . date('YmdHis');
-                $this->stashPaths($targetDir, $stashDir, $skipPaths);
-                DeploymentLog::info($deploymentId, "Stashed preserved paths: " . implode(', ', $skipPaths));
+                DeploymentLog::info($deploymentId, "Preserving paths: " . implode(', ', $skipPaths));
             }
 
             DeploymentLog::info($deploymentId, "Clearing target directory: {$targetDir}");
-            $this->fileManager->clear($targetDir);
+            $this->fileManager->clear($targetDir, $skipPaths);
 
             // ---- Step 7: Move new files into target ------------------------
+            // safe_keep paths are skipped in both clear() and copyContents(),
+            // so they are never deleted, overwritten, or moved — only backed up.
             DeploymentLog::info($deploymentId, "Copying new files to target...");
-            $this->fileManager->copyContents($extractedRoot, $targetDir);
-
-            // Restore stashed safe_keep paths
-            if ($stashDir && is_dir($stashDir)) {
-                $this->restoreStash($stashDir, $targetDir, $skipPaths);
-                $this->fileManager->deleteDirectory($stashDir);
-                DeploymentLog::info($deploymentId, "Restored preserved paths.");
-            }
+            $this->fileManager->copyContents($extractedRoot, $targetDir, $skipPaths);
 
             // ---- Step 8: Set permissions -----------------------------------
             DeploymentLog::info($deploymentId, "Setting file permissions (dirs: 755, files: 644)...");
@@ -171,62 +162,6 @@ class DeployService
     // =========================================================================
     // Private helpers
     // =========================================================================
-
-    /**
-     * Moves safe_keep paths from the target directory to a stash directory.
-     *
-     * @param string   $sourceDir   Target directory
-     * @param string   $stashDir    Temporary stash directory
-     * @param string[] $paths       Relative paths to stash
-     */
-    private function stashPaths(string $sourceDir, string $stashDir, array $paths): void
-    {
-        if (!is_dir($stashDir)) {
-            mkdir($stashDir, 0755, true);
-        }
-
-        foreach ($paths as $path) {
-            $src  = rtrim($sourceDir, '/') . '/' . ltrim($path, '/');
-            $dest = rtrim($stashDir, '/')  . '/' . ltrim($path, '/');
-
-            if (!file_exists($src)) {
-                continue;
-            }
-
-            $destParent = dirname($dest);
-            if (!is_dir($destParent)) {
-                mkdir($destParent, 0755, true);
-            }
-
-            rename($src, $dest);
-        }
-    }
-
-    /**
-     * Moves stashed paths back from the stash directory to the target directory.
-     *
-     * @param string   $stashDir   Stash directory
-     * @param string   $targetDir  Target directory
-     * @param string[] $paths      Relative paths to restore
-     */
-    private function restoreStash(string $stashDir, string $targetDir, array $paths): void
-    {
-        foreach ($paths as $path) {
-            $src  = rtrim($stashDir,  '/') . '/' . ltrim($path, '/');
-            $dest = rtrim($targetDir, '/') . '/' . ltrim($path, '/');
-
-            if (!file_exists($src)) {
-                continue;
-            }
-
-            $destParent = dirname($dest);
-            if (!is_dir($destParent)) {
-                mkdir($destParent, 0755, true);
-            }
-
-            rename($src, $dest);
-        }
-    }
 
     /**
      * Removes orphaned/partial zip files from a previous aborted deployment

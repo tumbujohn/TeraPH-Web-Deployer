@@ -1,0 +1,26 @@
+# Ignore dependency directories
+node_modules/
+env/
+venv/
+
+# Ignore sensitive environment variables
+.env
+.env.local
+
+# Ignore Operating System files
+.DS_Store
+Thumbs.db
+
+# Ignore log files and build folders
+*.log
+dist/
+build/
+
+
+# Ignore IDE and editor files
+
+# For Visual Studio Code
+.vscode/
+
+# Claude AI
+CLAUDE.md

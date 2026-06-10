@@ -63,21 +63,41 @@ class FileManager
      * Copies all contents of $sourceDir into $targetDir recursively.
      * Creates $targetDir if it does not exist.
      *
+     * Paths listed in $skipPaths (relative to $sourceDir) are completely ignored —
+     * neither the directory/file itself nor anything inside it will be touched on
+     * the target. This guarantees safe_keep paths are never overwritten by repo files.
+     *
+     * @param string[] $skipPaths Relative paths to leave untouched on the target
      * @throws RuntimeException on copy failure
      */
-    public function copyContents(string $sourceDir, string $targetDir): void
+    public function copyContents(string $sourceDir, string $targetDir, array $skipPaths = []): void
     {
         if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true)) {
             throw new RuntimeException("Cannot create target directory: {$targetDir}");
         }
+
+        // Normalise: strip leading/trailing slashes for reliable prefix matching
+        $skips = array_map(fn($p) => trim($p, '/'), $skipPaths);
 
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($sourceDir, RecursiveDirectoryIterator::SKIP_DOTS),
             RecursiveIteratorIterator::SELF_FIRST
         );
 
+        // Pre-compute source root length to slice relative paths from getRealPath().
+        // Uses getRealPath() on each item (instead of getSubPathname() on the iterator)
+        // to keep static analysis clean and normalize separators cross-platform.
+        $srcRootLen = strlen(realpath($sourceDir)) + 1;
+
         foreach ($iterator as $item) {
-            $destPath = $targetDir . '/' . $iterator->getSubPathname();
+            $relPath  = str_replace(DIRECTORY_SEPARATOR, '/', substr($item->getRealPath(), $srcRootLen));
+            $destPath = $targetDir . '/' . $relPath;
+
+            foreach ($skips as $skip) {
+                if ($relPath === $skip || str_starts_with($relPath, $skip . '/')) {
+                    continue 2;
+                }
+            }
 
             if ($item->isDir()) {
                 if (!is_dir($destPath) && !mkdir($destPath, 0755, true)) {
