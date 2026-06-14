@@ -507,6 +507,44 @@
     });
 
     // =========================================================================
+    // Project Form: Deploy template auto-fill
+    // =========================================================================
+    const DEPLOY_TEMPLATES = {
+        laravel: {
+            pre:  '{composer} install --no-dev --optimize-autoloader\nphp artisan config:cache\nphp artisan route:cache\nphp artisan view:cache\nphp artisan migrate --force',
+            post: 'php artisan queue:restart\nphp artisan cache:clear',
+        },
+        codeigniter: {
+            pre:  '{composer} install --no-dev\nphp spark migrate',
+            post: '',
+        },
+        wordpress: {
+            pre:  '{composer} install --no-dev',
+            post: '',
+        },
+        symfony: {
+            pre:  '{composer} install --no-dev --optimize-autoloader\nphp bin/console doctrine:migrations:migrate --no-interaction\nphp bin/console cache:clear',
+            post: '',
+        },
+    };
+
+    document.getElementById('p-deploy-template')?.addEventListener('change', function () {
+        const preset = DEPLOY_TEMPLATES[this.value];
+        if (!preset) return; // 'none' — leave textareas untouched
+
+        const preHooks  = document.getElementById('p-pre-hooks');
+        const postHooks = document.getElementById('p-post-hooks');
+        const hasContent = preHooks.value.trim() || postHooks.value.trim();
+
+        if (hasContent && !confirm(`Replace existing hooks with the "${this.value}" template?`)) {
+            return;
+        }
+
+        preHooks.value  = preset.pre;
+        postHooks.value = preset.post;
+    });
+
+    // =========================================================================
     // Project Form: Add
     // =========================================================================
     document.getElementById('btn-add-project')?.addEventListener('click', openAddForm);
@@ -568,6 +606,12 @@
         document.getElementById('p-github-pat').placeholder = p.github_pat
             ? 'PAT saved — leave blank to keep, or enter a new one'
             : 'ghp_xxxxxxxxxxxxxxxx (none saved)';
+
+        // PRAC fields
+        document.getElementById('p-deploy-template').value     = p.deploy_template || 'none';
+        document.getElementById('p-pre-hooks').value           = p.pre_deploy_hooks  || '';
+        document.getElementById('p-post-hooks').value          = p.post_deploy_hooks || '';
+        document.getElementById('p-terminal-enabled').checked  = p.terminal_enabled != 0;
 
         // Trigger toggle logic
         document.getElementById('p-source-type').dispatchEvent(new Event('change'));

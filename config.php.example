@@ -35,9 +35,26 @@ define('TMP_PATH',     __DIR__ . '/storage/tmp');
 define('LOG_PATH',     __DIR__ . '/storage/logs');
 
 // ---- Deployment ----
-define('MAX_BACKUPS_PER_PROJECT', 10);  // Backups to retain per project
-define('DOWNLOAD_TIMEOUT',        300); // cURL download timeout (seconds)
+define('MAX_BACKUPS_PER_PROJECT', 10);   // Backups to retain per project
+define('DOWNLOAD_TIMEOUT',        300);  // cURL download timeout (seconds)
 define('LOCK_TIMEOUT',            1200); // Stale lock auto-release (seconds)
+define('HOOK_TIMEOUT',            300);  // Max seconds for a single deploy hook command
+
+// ---- Deploy Strategy ----
+// 'auto'    → detect symlink capability on first deploy and cache the result
+// 'symlink' → force symlink mode (requires webroot to point at target/current)
+// 'copy'    → always use enhanced copy-in-place (safe default for shared hosting)
+define('DEPLOY_STRATEGY', 'auto');
+
+// ---- Deployer Root ----
+// Absolute path to the deployer installation root. Used by the self-protection
+// guard to prevent the deployer from deleting itself during a deployment.
+// Set this manually if dirname(__DIR__) does not point to the correct location.
+define('DEPLOYER_ROOT', dirname(__DIR__));
+
+// ---- Terminal ----
+define('TERMINAL_ENABLED', true);  // Set false to disable the web terminal site-wide
+define('TERMINAL_TIMEOUT', 600);   // Max seconds a single terminal command may run
 
 // ---- GitHub ----
 // Optional: personal access token for private repositories

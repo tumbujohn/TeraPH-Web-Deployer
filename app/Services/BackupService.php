@@ -30,7 +30,16 @@ class BackupService
             throw new RuntimeException("Cannot create backup archive: {$backupPath}");
         }
 
-        $this->addDirectoryToZip($zip, $targetDir, '');
+        // PRAC.1 — exclude the deployer directory if it lives inside the target
+        $deployerExcludeRel = null;
+        if (is_deployer_inside_target($targetDir)) {
+            $rel = deployer_relative_path($targetDir);
+            if ($rel !== '') {
+                $deployerExcludeRel = $rel;
+            }
+        }
+
+        $this->addDirectoryToZip($zip, $targetDir, '', $deployerExcludeRel);
 
         $zip->close();
 
@@ -59,7 +68,7 @@ class BackupService
         $targetDir   = $project['target_path'];
 
         // Safety backup of current state before restore
-        $safetyName = $project['name'] . '_pre_restore_' . date('YmdHis') . '.zip';
+        $safetyName = $project['name'] . '_pre_restore_' . date('YmdHis') . '_d' . $deploymentId . '.zip';
         $safetyPath = BACKUP_PATH . '/' . $safetyName;
         if (is_dir($targetDir)) {
             $zip = new ZipArchive();
@@ -136,19 +145,30 @@ class BackupService
     /**
      * Recursively adds a directory's contents to an open ZipArchive.
      *
-     * @param ZipArchive $zip      Open ZipArchive instance
-     * @param string     $dir      Absolute path to the directory to add
-     * @param string     $zipRoot  Path prefix inside the zip archive
+     * @param ZipArchive  $zip         Open ZipArchive instance
+     * @param string      $dir         Absolute path to the directory to add
+     * @param string      $zipRoot     Path prefix inside the zip archive
+     * @param string|null $excludeRel  Relative path to exclude (e.g. deployer dir)
      */
-    private function addDirectoryToZip(ZipArchive $zip, string $dir, string $zipRoot): void
+    private function addDirectoryToZip(ZipArchive $zip, string $dir, string $zipRoot, ?string $excludeRel = null): void
     {
+        $realDir    = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', realpath($dir) ?: $dir), '/');
+        $srcRootLen = strlen($realDir) + 1;
+
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
             RecursiveIteratorIterator::SELF_FIRST
         );
 
         foreach ($iterator as $item) {
-            $relativePath = $zipRoot . ($zipRoot ? '/' : '') . $iterator->getSubPathname();
+            $relPath = ltrim(str_replace(DIRECTORY_SEPARATOR, '/', substr($item->getRealPath(), $srcRootLen)), '/');
+
+            // Skip excluded subtree (e.g. deployer root living inside the target)
+            if ($excludeRel !== null && ($relPath === $excludeRel || str_starts_with($relPath, $excludeRel . '/'))) {
+                continue;
+            }
+
+            $relativePath = $zipRoot . ($zipRoot ? '/' : '') . $relPath;
 
             if ($item->isDir()) {
                 $zip->addEmptyDir($relativePath);

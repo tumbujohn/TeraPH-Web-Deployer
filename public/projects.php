@@ -123,18 +123,24 @@ json_error('Unknown action.', 400);
 
 function sanitizeProjectInput(array $post): array
 {
+    $validTemplates = ['none', 'laravel', 'codeigniter', 'wordpress', 'symfony'];
+    $template       = trim($post['deploy_template'] ?? 'none');
+
     return [
-        'name'        => trim($post['name']        ?? ''),
-        'source_type' => trim($post['source_type'] ?? 'github'),
-        'repo_url'    => trim($post['repo_url']    ?? ''),
-        'target_path' => trim($post['target_path'] ?? ''),
-        'branch'      => trim($post['branch']      ?? 'main'),
-        'safe_keep'   => !empty($post['safe_keep'])
-                            ? json_encode(array_map('trim', explode(',', $post['safe_keep'])))
-                            : null,
-        'github_pat'  => trim($post['github_pat']  ?? '') ?: null,
-        // keep_pat=1 means: if github_pat is blank, preserve the existing DB value
-        'keep_pat'    => !empty($post['keep_pat']),
+        'name'              => trim($post['name']        ?? ''),
+        'source_type'       => trim($post['source_type'] ?? 'github'),
+        'repo_url'          => trim($post['repo_url']    ?? ''),
+        'target_path'       => trim($post['target_path'] ?? ''),
+        'branch'            => trim($post['branch']      ?? 'main'),
+        'safe_keep'         => !empty($post['safe_keep'])
+                                   ? json_encode(array_map('trim', explode(',', $post['safe_keep'])))
+                                   : null,
+        'github_pat'        => trim($post['github_pat']  ?? '') ?: null,
+        'keep_pat'          => !empty($post['keep_pat']),
+        'deploy_template'   => in_array($template, $validTemplates, true) ? $template : 'none',
+        'pre_deploy_hooks'  => trim($post['pre_deploy_hooks']  ?? '') ?: null,
+        'post_deploy_hooks' => trim($post['post_deploy_hooks'] ?? '') ?: null,
+        'terminal_enabled'  => isset($post['terminal_enabled']) ? (int)(bool)$post['terminal_enabled'] : 1,
     ];
 }
 

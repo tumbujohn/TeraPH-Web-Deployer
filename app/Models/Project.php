@@ -65,18 +65,24 @@ class Project
     {
         $pdo  = Database::connect();
         $stmt = $pdo->prepare("
-            INSERT INTO projects (name, source_type, repo_url, target_path, branch, safe_keep, github_pat, created_at)
-            VALUES (:name, :source_type, :repo_url, :target_path, :branch, :safe_keep, :github_pat, :created_at)
+            INSERT INTO projects (name, source_type, repo_url, target_path, branch, safe_keep, github_pat,
+                                  deploy_template, pre_deploy_hooks, post_deploy_hooks, terminal_enabled, created_at)
+            VALUES (:name, :source_type, :repo_url, :target_path, :branch, :safe_keep, :github_pat,
+                    :deploy_template, :pre_deploy_hooks, :post_deploy_hooks, :terminal_enabled, :created_at)
         ");
         $stmt->execute([
-            ':name'        => $data['name'],
-            ':source_type' => $data['source_type'] ?? 'github',
-            ':repo_url'    => $data['repo_url'] ?? '',
-            ':target_path' => $data['target_path'],
-            ':branch'      => $data['branch'] ?? 'main',
-            ':safe_keep'   => $data['safe_keep'] ?? null,
-            ':github_pat'  => $data['github_pat'] ?? null,
-            ':created_at'  => date('Y-m-d H:i:s'),
+            ':name'              => $data['name'],
+            ':source_type'       => $data['source_type'] ?? 'github',
+            ':repo_url'          => $data['repo_url'] ?? '',
+            ':target_path'       => $data['target_path'],
+            ':branch'            => $data['branch'] ?? 'main',
+            ':safe_keep'         => $data['safe_keep'] ?? null,
+            ':github_pat'        => $data['github_pat'] ?? null,
+            ':deploy_template'   => $data['deploy_template'] ?? 'none',
+            ':pre_deploy_hooks'  => $data['pre_deploy_hooks'] ?? null,
+            ':post_deploy_hooks' => $data['post_deploy_hooks'] ?? null,
+            ':terminal_enabled'  => isset($data['terminal_enabled']) ? (int) $data['terminal_enabled'] : 1,
+            ':created_at'        => date('Y-m-d H:i:s'),
         ]);
         return (int) $pdo->lastInsertId();
     }
@@ -98,48 +104,64 @@ class Project
         if (empty($newPat) && !empty($data['keep_pat'])) {
             $stmt = $pdo->prepare("
                 UPDATE projects
-                SET name        = :name,
-                    source_type = :source_type,
-                    repo_url    = :repo_url,
-                    target_path = :target_path,
-                    branch      = :branch,
-                    safe_keep   = :safe_keep,
-                    updated_at  = :updated_at
+                SET name              = :name,
+                    source_type       = :source_type,
+                    repo_url          = :repo_url,
+                    target_path       = :target_path,
+                    branch            = :branch,
+                    safe_keep         = :safe_keep,
+                    deploy_template   = :deploy_template,
+                    pre_deploy_hooks  = :pre_deploy_hooks,
+                    post_deploy_hooks = :post_deploy_hooks,
+                    terminal_enabled  = :terminal_enabled,
+                    updated_at        = :updated_at
                 WHERE id = :id
             ");
             $stmt->execute([
-                ':id'          => $id,
-                ':name'        => $data['name'],
-                ':source_type' => $data['source_type'] ?? 'github',
-                ':repo_url'    => $data['repo_url'] ?? '',
-                ':target_path' => $data['target_path'],
-                ':branch'      => $data['branch'] ?? 'main',
-                ':safe_keep'   => $data['safe_keep'] ?? null,
-                ':updated_at'  => date('Y-m-d H:i:s'),
+                ':id'                => $id,
+                ':name'              => $data['name'],
+                ':source_type'       => $data['source_type'] ?? 'github',
+                ':repo_url'          => $data['repo_url'] ?? '',
+                ':target_path'       => $data['target_path'],
+                ':branch'            => $data['branch'] ?? 'main',
+                ':safe_keep'         => $data['safe_keep'] ?? null,
+                ':deploy_template'   => $data['deploy_template'] ?? 'none',
+                ':pre_deploy_hooks'  => $data['pre_deploy_hooks'] ?? null,
+                ':post_deploy_hooks' => $data['post_deploy_hooks'] ?? null,
+                ':terminal_enabled'  => isset($data['terminal_enabled']) ? (int) $data['terminal_enabled'] : 1,
+                ':updated_at'        => date('Y-m-d H:i:s'),
             ]);
         } else {
             $stmt = $pdo->prepare("
                 UPDATE projects
-                SET name        = :name,
-                    source_type = :source_type,
-                    repo_url    = :repo_url,
-                    target_path = :target_path,
-                    branch      = :branch,
-                    safe_keep   = :safe_keep,
-                    github_pat  = :github_pat,
-                    updated_at  = :updated_at
+                SET name              = :name,
+                    source_type       = :source_type,
+                    repo_url          = :repo_url,
+                    target_path       = :target_path,
+                    branch            = :branch,
+                    safe_keep         = :safe_keep,
+                    github_pat        = :github_pat,
+                    deploy_template   = :deploy_template,
+                    pre_deploy_hooks  = :pre_deploy_hooks,
+                    post_deploy_hooks = :post_deploy_hooks,
+                    terminal_enabled  = :terminal_enabled,
+                    updated_at        = :updated_at
                 WHERE id = :id
             ");
             $stmt->execute([
-                ':id'          => $id,
-                ':name'        => $data['name'],
-                ':source_type' => $data['source_type'] ?? 'github',
-                ':repo_url'    => $data['repo_url'] ?? '',
-                ':target_path' => $data['target_path'],
-                ':branch'      => $data['branch'] ?? 'main',
-                ':safe_keep'   => $data['safe_keep'] ?? null,
-                ':github_pat'  => $newPat ?: null,
-                ':updated_at'  => date('Y-m-d H:i:s'),
+                ':id'                => $id,
+                ':name'              => $data['name'],
+                ':source_type'       => $data['source_type'] ?? 'github',
+                ':repo_url'          => $data['repo_url'] ?? '',
+                ':target_path'       => $data['target_path'],
+                ':branch'            => $data['branch'] ?? 'main',
+                ':safe_keep'         => $data['safe_keep'] ?? null,
+                ':github_pat'        => $newPat ?: null,
+                ':deploy_template'   => $data['deploy_template'] ?? 'none',
+                ':pre_deploy_hooks'  => $data['pre_deploy_hooks'] ?? null,
+                ':post_deploy_hooks' => $data['post_deploy_hooks'] ?? null,
+                ':terminal_enabled'  => isset($data['terminal_enabled']) ? (int) $data['terminal_enabled'] : 1,
+                ':updated_at'        => date('Y-m-d H:i:s'),
             ]);
         }
     }
@@ -191,5 +213,31 @@ class Project
 
         // Fallback: comma-separated string
         return array_map('trim', explode(',', $project['safe_keep']));
+    }
+
+    /**
+     * Returns the deploy hook commands for a project as a string array.
+     *
+     * @param  array<string, mixed> $project
+     * @param  string               $phase    'pre' or 'post'
+     * @return string[]
+     */
+    public static function getDeployHooks(array $project, string $phase): array
+    {
+        $key = $phase === 'pre' ? 'pre_deploy_hooks' : 'post_deploy_hooks';
+        $raw = $project[$key] ?? null;
+
+        if (empty($raw)) {
+            return [];
+        }
+
+        // Stored as JSON array
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            return array_values(array_filter(array_map('trim', $decoded)));
+        }
+
+        // Fallback: newline-separated plain text
+        return array_values(array_filter(array_map('trim', explode("\n", $raw))));
     }
 }

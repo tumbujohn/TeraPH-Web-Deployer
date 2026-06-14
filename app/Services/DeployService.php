@@ -50,6 +50,7 @@ class DeployService
 
         DeploymentLog::info($deploymentId, "Deployment started for project: {$project['name']} (mode: {$mode})");
         DeploymentLog::info($deploymentId, "Lock acquired.");
+        DeploymentLog::info($deploymentId, "Deploy strategy: " . detect_deploy_strategy());
 
         $zipPath    = null;
         $extractDir = null;
@@ -117,6 +118,15 @@ class DeployService
                 DeploymentLog::info($deploymentId, "Preserving paths: " . implode(', ', $skipPaths));
             }
 
+            // PRAC.1 — auto-protect the deployer if it lives inside the target
+            if (is_deployer_inside_target($targetDir)) {
+                $deployerRel = deployer_relative_path($targetDir);
+                if ($deployerRel !== '') {
+                    $skipPaths[] = $deployerRel;
+                    DeploymentLog::info($deploymentId, "[GUARD] Deployer is inside target — auto-protecting: {$deployerRel}");
+                }
+            }
+
             DeploymentLog::info($deploymentId, "Clearing target directory: {$targetDir}");
             $this->fileManager->clear($targetDir, $skipPaths);
 
@@ -126,9 +136,42 @@ class DeployService
             DeploymentLog::info($deploymentId, "Copying new files to target...");
             $this->fileManager->copyContents($extractedRoot, $targetDir, $skipPaths);
 
+            // ---- Step 7a: Run pre-deploy hooks -----------------------------
+            $hookRunner = new HookRunner();
+            $preHooks   = Project::getDeployHooks($project, 'pre');
+            if (!empty($preHooks)) {
+                DeploymentLog::info($deploymentId, "Running pre-deploy hooks (" . count($preHooks) . " command(s))...");
+                $exit = $hookRunner->runAll($preHooks, $targetDir, function (string $chunk) use ($deploymentId): void {
+                    $line = trim($chunk);
+                    if ($line !== '') {
+                        DeploymentLog::info($deploymentId, $line);
+                    }
+                });
+                if ($exit !== 0) {
+                    throw new RuntimeException("Pre-deploy hook failed with exit code {$exit}.");
+                }
+                DeploymentLog::info($deploymentId, "Pre-deploy hooks completed.");
+            }
+
             // ---- Step 8: Set permissions -----------------------------------
             DeploymentLog::info($deploymentId, "Setting file permissions (dirs: 755, files: 644)...");
             $this->fileManager->setPermissions($targetDir);
+
+            // ---- Step 8a: Run post-deploy hooks ----------------------------
+            $postHooks = Project::getDeployHooks($project, 'post');
+            if (!empty($postHooks)) {
+                DeploymentLog::info($deploymentId, "Running post-deploy hooks (" . count($postHooks) . " command(s))...");
+                $exit = $hookRunner->runAll($postHooks, $targetDir, function (string $chunk) use ($deploymentId): void {
+                    $line = trim($chunk);
+                    if ($line !== '') {
+                        DeploymentLog::info($deploymentId, $line);
+                    }
+                });
+                if ($exit !== 0) {
+                    throw new RuntimeException("Post-deploy hook failed with exit code {$exit}.");
+                }
+                DeploymentLog::info($deploymentId, "Post-deploy hooks completed.");
+            }
 
             // ---- Step 9: Log success + unlock ------------------------------
             DeploymentLog::info($deploymentId, "Deployment completed successfully.");

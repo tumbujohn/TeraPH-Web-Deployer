@@ -3,6 +3,106 @@
 // Shared Helper Functions
 // =============================================================================
 
+// =============================================================================
+// Self-Protection Helpers (PRAC.1)
+// =============================================================================
+
+/**
+ * Returns true if the deployer's own root directory lives inside $targetPath.
+ * Used by DeployService and BackupService to prevent self-deletion.
+ */
+function is_deployer_inside_target(string $targetPath): bool
+{
+    $deployerRoot = defined('DEPLOYER_ROOT') ? DEPLOYER_ROOT : dirname(__DIR__);
+    $deployerReal = realpath($deployerRoot);
+    $targetReal   = realpath($targetPath);
+
+    if ($deployerReal === false || $targetReal === false) {
+        return false;
+    }
+
+    $deployerNorm = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', $deployerReal), '/');
+    $targetNorm   = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', $targetReal), '/');
+
+    return str_starts_with($deployerNorm . '/', $targetNorm . '/');
+}
+
+/**
+ * Returns the relative path of the deployer root within $targetPath.
+ * Returns an empty string if the deployer is not inside the target.
+ *
+ * Example: target = /home/user/public_html, deployer = /home/user/public_html/deployer
+ *          → returns 'deployer'
+ */
+function deployer_relative_path(string $targetPath): string
+{
+    $deployerRoot = defined('DEPLOYER_ROOT') ? DEPLOYER_ROOT : dirname(__DIR__);
+    $deployerReal = realpath($deployerRoot);
+    $targetReal   = realpath($targetPath);
+
+    if ($deployerReal === false || $targetReal === false) {
+        return '';
+    }
+
+    $deployerNorm = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', $deployerReal), '/');
+    $targetNorm   = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', $targetReal), '/');
+
+    if (!str_starts_with($deployerNorm . '/', $targetNorm . '/')) {
+        return '';
+    }
+
+    return ltrim(substr($deployerNorm, strlen($targetNorm)), '/');
+}
+
+// =============================================================================
+// Deploy Strategy Detection (PRAC.2)
+// =============================================================================
+
+/**
+ * Resolves the effective deploy strategy for this installation.
+ *
+ * - 'symlink' → uses atomic symlink-based releases (requires host support)
+ * - 'copy'    → uses enhanced copy-in-place (safe fallback for shared hosting)
+ *
+ * When DEPLOY_STRATEGY = 'auto', the result of a one-time symlink capability
+ * test is cached in storage/deploy_strategy.txt.
+ */
+function detect_deploy_strategy(): string
+{
+    $configured = defined('DEPLOY_STRATEGY') ? DEPLOY_STRATEGY : 'auto';
+
+    if ($configured === 'symlink') return 'symlink';
+    if ($configured === 'copy')    return 'copy';
+
+    // Auto-detect: check cached result first
+    $cacheFile = defined('STORAGE_PATH')
+        ? STORAGE_PATH . '/deploy_strategy.txt'
+        : dirname(__DIR__) . '/storage/deploy_strategy.txt';
+
+    if (file_exists($cacheFile)) {
+        $cached = trim((string) file_get_contents($cacheFile));
+        if (in_array($cached, ['symlink', 'copy'], true)) {
+            return $cached;
+        }
+    }
+
+    // Test symlink capability using a unique name to avoid race conditions
+    $tmpDir     = defined('TMP_PATH') ? TMP_PATH : sys_get_temp_dir();
+    $pid        = getmypid() ?: mt_rand(1000, 9999);
+    $testTarget = $tmpDir . '/.symtest_target_' . $pid;
+    $testLink   = $tmpDir . '/.symtest_link_' . $pid;
+
+    @file_put_contents($testTarget, '');
+    $canSymlink = @symlink($testTarget, $testLink) && is_link($testLink);
+    @unlink($testTarget);
+    @unlink($testLink);
+
+    $strategy = $canSymlink ? 'symlink' : 'copy';
+    @file_put_contents($cacheFile, $strategy);
+
+    return $strategy;
+}
+
 /**
  * Bootstraps the application: loads config, runs migrations, starts session.
  * Called once from every public entry point.

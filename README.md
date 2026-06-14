@@ -4,6 +4,9 @@ A self-hosted, lightweight deployment panel for PHP applications on shared cPane
 Deploy registered web projects from GitHub to your server — safely, traceably, and reversibly — with no SSH or external CI/CD required.
 
 ---
+The Goal: TeraPH WD should be the best deploy panel for shared/cPanel PHP hosting and a perfect fit for VPS too
+
+---
 
 ## Table of Contents
 

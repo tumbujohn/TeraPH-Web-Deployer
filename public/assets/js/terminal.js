@@ -137,3 +137,49 @@ document.querySelector('[data-close="modal-web-terminal"]').addEventListener('cl
     commandActive = false;
     currentProjectId = null;
 });
+
+// =============================================================================
+// PRAC.3 — Shortcut toolbar: inject command into input on click
+// =============================================================================
+document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.terminal-shortcut');
+    if (!btn) return;
+    const cmd = btn.dataset.cmd || '';
+    if (!cmd) return;
+    const input = document.getElementById('terminal-input');
+    input.value = cmd;
+    input.focus();
+});
+
+// =============================================================================
+// PRAC.3 — "↓ composer.phar" button: download into project target directory
+// =============================================================================
+document.getElementById('btn-get-composer-phar').addEventListener('click', async function () {
+    if (!currentProjectId || commandActive) return;
+
+    commandActive = true;
+    this.disabled = true;
+
+    const log = document.getElementById('terminal-log');
+    const entry = document.createElement('div');
+    entry.innerHTML = '<span style="color:#888">Downloading composer.phar into project directory…</span>';
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+
+    try {
+        const fd = new FormData();
+        fd.append('project_id', currentProjectId);
+        if (window.CSRF_TOKEN) fd.append('_csrf', window.CSRF_TOKEN);
+
+        const response = await fetch('composer_download.php', { method: 'POST', body: fd });
+        const text     = await response.text();
+        appendLogOutput(log, '\n' + text, !response.ok);
+    } catch (err) {
+        appendLogOutput(log, `\n[Download failed: ${err.message}]\n`, true);
+    }
+
+    log.scrollTop = log.scrollHeight;
+    this.disabled = false;
+    commandActive = false;
+    document.getElementById('terminal-input').focus();
+});

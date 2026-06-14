@@ -38,6 +38,7 @@ $csrf     = csrf_token();
                 <?= h(Auth::user()) ?>
             </span>
             <button id="btn-add-project" class="btn btn-ghost btn-sm">+ Add Project</button>
+            <a href="settings.php" class="btn btn-ghost btn-sm">Settings</a>
             <a href="logout.php" class="btn btn-ghost btn-sm">Logout</a>
         </div>
     </div>
@@ -74,10 +75,11 @@ $csrf     = csrf_token();
             <div class="project-grid" id="project-grid">
                 <?php foreach ($projects as $project): ?>
                     <?php
-                        $lastStatus   = $project['last_status'] ?? '';
-                        $lastDeployed = $project['last_deployed_at'] ?? null;
+                        $lastStatus      = $project['last_status'] ?? '';
+                        $lastDeployed    = $project['last_deployed_at'] ?? null;
+                        $deployerOverlap = is_deployer_inside_target($project['target_path']);
                     ?>
-                    <div class="project-card" data-project-id="<?= $project['id'] ?>" id="project-card-<?= $project['id'] ?>">
+                    <div class="project-card<?= $deployerOverlap ? ' project-card--overlap' : '' ?>" data-project-id="<?= $project['id'] ?>" id="project-card-<?= $project['id'] ?>">
                         <div class="project-card-header">
                             <div>
                                 <h2 class="project-name"><?= h($project['name']) ?></h2>
@@ -85,6 +87,9 @@ $csrf     = csrf_token();
                                     <span class="project-branch">📦 Manual Upload</span>
                                 <?php else: ?>
                                     <span class="project-branch">⎇ <?= h($project['branch']) ?></span>
+                                <?php endif; ?>
+                                <?php if ($deployerOverlap): ?>
+                                    <span class="overlap-badge" title="Deployer lives inside this project's target directory — it will be auto-protected during deployment.">⚠ Deployer inside target</span>
                                 <?php endif; ?>
                             </div>
                             <div class="status-badge <?= h(status_class($lastStatus)) ?>">
@@ -294,6 +299,37 @@ $csrf     = csrf_token();
                         placeholder="ghp_xxxxxxxxxxxxxxxx" autocomplete="off">
                 </div>
 
+                <div class="form-group">
+                    <label for="p-deploy-template">Deploy Template</label>
+                    <select id="p-deploy-template" name="deploy_template" class="form-control">
+                        <option value="none">None (manual hooks only)</option>
+                        <option value="laravel">Laravel</option>
+                        <option value="codeigniter">CodeIgniter 4</option>
+                        <option value="wordpress">WordPress</option>
+                        <option value="symfony">Symfony</option>
+                    </select>
+                    <small class="form-hint">Selecting a framework auto-fills the hook commands below.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="p-pre-hooks">Pre-Deploy Hooks <span class="form-hint-inline">(one command per line, runs after files are copied)</span></label>
+                    <textarea id="p-pre-hooks" name="pre_deploy_hooks" class="form-control form-textarea" rows="3"
+                        placeholder="{composer} install --no-dev&#10;php artisan config:cache"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="p-post-hooks">Post-Deploy Hooks <span class="form-hint-inline">(one command per line, runs after permissions are set)</span></label>
+                    <textarea id="p-post-hooks" name="post_deploy_hooks" class="form-control form-textarea" rows="3"
+                        placeholder="php artisan queue:restart&#10;php artisan cache:clear"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-check-label">
+                        <input type="checkbox" id="p-terminal-enabled" name="terminal_enabled" value="1" checked>
+                        Enable web terminal for this project
+                    </label>
+                </div>
+
                 <div class="alert alert-danger" id="project-form-error" hidden></div>
             </form>
         </div>
@@ -335,9 +371,17 @@ $csrf     = csrf_token();
                 <!-- Executed outputs will land here -->
                 <div style="color: #888;">System Ready. Target configured.</div>
             </div>
+            <div id="terminal-toolbar" class="terminal-toolbar">
+                <button class="btn btn-xs terminal-shortcut" data-cmd="{composer} install --no-dev --optimize-autoloader">{c} install</button>
+                <button class="btn btn-xs terminal-shortcut" data-cmd="{composer} dump-autoload">{c} dump-autoload</button>
+                <button class="btn btn-xs terminal-shortcut" data-cmd="php artisan migrate --force">artisan migrate</button>
+                <button class="btn btn-xs terminal-shortcut" data-cmd="php artisan config:cache">artisan config:cache</button>
+                <button class="btn btn-xs terminal-shortcut" data-cmd="php artisan queue:restart">artisan queue:restart</button>
+                <button class="btn btn-xs" id="btn-get-composer-phar" title="Download composer.phar into the project's target directory">↓ composer.phar</button>
+            </div>
             <div class="terminal-input-row">
                 <span class="terminal-prompt-icon">$</span>
-                <input type="text" id="terminal-input" class="terminal-input" placeholder="Type a command (e.g., composer dump-autoload) and press Enter..." autocomplete="off" spellcheck="false" />
+                <input type="text" id="terminal-input" class="terminal-input" placeholder="Type a command (e.g., {composer} dump-autoload) and press Enter..." autocomplete="off" spellcheck="false" />
             </div>
         </div>
     </div>
