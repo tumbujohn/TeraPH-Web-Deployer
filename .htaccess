@@ -2,30 +2,36 @@
 # TeraPH Web Deployer — Root .htaccess
 # ============================================================================
 
-# Force HTTPS
 RewriteEngine On
+
+# Force HTTPS.
+# Also checks X-Forwarded-Proto for cPanel/WHM setups where SSL is terminated
+# at the load balancer and %{HTTPS} is never set to "on" by Apache itself.
 RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !=https
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# Prevent directory listing
-Options -Indexes
-
 # ----------------------------------------------------------------------------
-# 1. Block access to config and structural internals
+# 1. Block direct access to sensitive files
 # ----------------------------------------------------------------------------
-<FilesMatch "^(config\.php|\.env|\.git|\.gitignore|\.htaccess|tera)$">
-    Order allow,deny
-    Deny from all
+# Note: Apache never serves .htaccess files as content, so they are omitted.
+# Dual-syntax block covers both Apache 2.2 (mod_access_compat) and 2.4+.
+<FilesMatch "^(config\.php|\.env|\.git|\.gitignore|tera)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
 </FilesMatch>
 
 # ----------------------------------------------------------------------------
-# 2. Transparently Route All Traffic to /public/
+# 2. Transparently route all traffic to /public/
 # ----------------------------------------------------------------------------
-# If the user drops this whole folder into public_html instead of mapping a 
-# subdomain specifically to /public, this ensures all traffic is securely 
-# forced downward into the public directory.
-
+# If this deployer is installed as a subdirectory (e.g. public_html/deployer/)
+# rather than at a dedicated subdomain pointing directly to /public/, this rule
+# transparently forwards all requests down into the public/ webroot without a
+# redirect — the URL the visitor sees does not change.
 RewriteCond %{REQUEST_URI} !public/
 RewriteRule ^(.*)$ public/$1 [L]
-
-
