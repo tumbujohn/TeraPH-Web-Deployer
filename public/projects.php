@@ -141,6 +141,7 @@ function sanitizeProjectInput(array $post): array
         'pre_deploy_hooks'  => trim($post['pre_deploy_hooks']  ?? '') ?: null,
         'post_deploy_hooks' => trim($post['post_deploy_hooks'] ?? '') ?: null,
         'terminal_enabled'  => isset($post['terminal_enabled']) ? (int)(bool)$post['terminal_enabled'] : 1,
+        'env_mode'          => trim($post['env_mode'] ?? '') === 'managed' ? 'managed' : 'none',
     ];
 }
 

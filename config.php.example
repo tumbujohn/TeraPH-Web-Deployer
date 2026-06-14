@@ -56,6 +56,12 @@ define('DEPLOYER_ROOT', dirname(__DIR__));
 define('TERMINAL_ENABLED', true);  // Set false to disable the web terminal site-wide
 define('TERMINAL_TIMEOUT', 600);   // Max seconds a single terminal command may run
 
+// ---- Security ----
+// Used to encrypt per-project .env variable values stored in the database.
+// Generate with: php -r "echo bin2hex(random_bytes(32));"
+// WARNING: Changing this key will invalidate all stored .env values.
+define('SECRET_KEY', '');
+
 // ---- GitHub ----
 // Optional: personal access token for private repositories
 define('GITHUB_PAT', '');

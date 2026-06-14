@@ -612,6 +612,7 @@
         document.getElementById('p-pre-hooks').value           = p.pre_deploy_hooks  || '';
         document.getElementById('p-post-hooks').value          = p.post_deploy_hooks || '';
         document.getElementById('p-terminal-enabled').checked  = p.terminal_enabled != 0;
+        document.getElementById('p-env-mode').value            = p.env_mode || 'none';
 
         // Trigger toggle logic
         document.getElementById('p-source-type').dispatchEvent(new Event('change'));

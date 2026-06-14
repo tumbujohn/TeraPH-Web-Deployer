@@ -66,9 +66,11 @@ class Project
         $pdo  = Database::connect();
         $stmt = $pdo->prepare("
             INSERT INTO projects (name, source_type, repo_url, target_path, branch, safe_keep, github_pat,
-                                  deploy_template, pre_deploy_hooks, post_deploy_hooks, terminal_enabled, created_at)
+                                  deploy_template, pre_deploy_hooks, post_deploy_hooks, terminal_enabled,
+                                  env_mode, env_template, created_at)
             VALUES (:name, :source_type, :repo_url, :target_path, :branch, :safe_keep, :github_pat,
-                    :deploy_template, :pre_deploy_hooks, :post_deploy_hooks, :terminal_enabled, :created_at)
+                    :deploy_template, :pre_deploy_hooks, :post_deploy_hooks, :terminal_enabled,
+                    :env_mode, :env_template, :created_at)
         ");
         $stmt->execute([
             ':name'              => $data['name'],
@@ -82,6 +84,8 @@ class Project
             ':pre_deploy_hooks'  => $data['pre_deploy_hooks'] ?? null,
             ':post_deploy_hooks' => $data['post_deploy_hooks'] ?? null,
             ':terminal_enabled'  => isset($data['terminal_enabled']) ? (int) $data['terminal_enabled'] : 1,
+            ':env_mode'          => $data['env_mode'] ?? 'none',
+            ':env_template'      => $data['env_template'] ?? null,
             ':created_at'        => date('Y-m-d H:i:s'),
         ]);
         return (int) $pdo->lastInsertId();
@@ -114,6 +118,8 @@ class Project
                     pre_deploy_hooks  = :pre_deploy_hooks,
                     post_deploy_hooks = :post_deploy_hooks,
                     terminal_enabled  = :terminal_enabled,
+                    env_mode          = :env_mode,
+                    env_template      = :env_template,
                     updated_at        = :updated_at
                 WHERE id = :id
             ");
@@ -129,6 +135,8 @@ class Project
                 ':pre_deploy_hooks'  => $data['pre_deploy_hooks'] ?? null,
                 ':post_deploy_hooks' => $data['post_deploy_hooks'] ?? null,
                 ':terminal_enabled'  => isset($data['terminal_enabled']) ? (int) $data['terminal_enabled'] : 1,
+                ':env_mode'          => $data['env_mode'] ?? 'none',
+                ':env_template'      => $data['env_template'] ?? null,
                 ':updated_at'        => date('Y-m-d H:i:s'),
             ]);
         } else {
@@ -145,6 +153,8 @@ class Project
                     pre_deploy_hooks  = :pre_deploy_hooks,
                     post_deploy_hooks = :post_deploy_hooks,
                     terminal_enabled  = :terminal_enabled,
+                    env_mode          = :env_mode,
+                    env_template      = :env_template,
                     updated_at        = :updated_at
                 WHERE id = :id
             ");
@@ -161,6 +171,8 @@ class Project
                 ':pre_deploy_hooks'  => $data['pre_deploy_hooks'] ?? null,
                 ':post_deploy_hooks' => $data['post_deploy_hooks'] ?? null,
                 ':terminal_enabled'  => isset($data['terminal_enabled']) ? (int) $data['terminal_enabled'] : 1,
+                ':env_mode'          => $data['env_mode'] ?? 'none',
+                ':env_template'      => $data['env_template'] ?? null,
                 ':updated_at'        => date('Y-m-d H:i:s'),
             ]);
         }

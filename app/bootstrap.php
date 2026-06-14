@@ -19,4 +19,5 @@ require_once $root . '/app/Services/GitHubService.php';
 require_once $root . '/app/Services/FileManager.php';
 require_once $root . '/app/Services/BackupService.php';
 require_once $root . '/app/Services/HookRunner.php';
+require_once $root . '/app/Models/EnvVar.php';
 require_once $root . '/app/Services/DeployService.php';

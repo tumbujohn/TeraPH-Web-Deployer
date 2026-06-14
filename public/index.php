@@ -148,6 +148,12 @@ $csrf     = csrf_token();
                                 >
                                     Backups
                                 </button>
+                                <a
+                                    href="env_manager.php?project_id=<?= $project['id'] ?>"
+                                    class="btn btn-ghost btn-sm"
+                                    title="Manage .env variables for this project"
+                                    style="<?= ($project['env_mode'] ?? 'none') === 'managed' ? 'color:#3ecf8e;' : '' ?>"
+                                >.env<?= ($project['env_mode'] ?? 'none') === 'managed' ? ' ✓' : '' ?></a>
                                 <button
                                     class="btn btn-icon btn-edit"
                                     data-project-id="<?= $project['id'] ?>"
@@ -328,6 +334,15 @@ $csrf     = csrf_token();
                         <input type="checkbox" id="p-terminal-enabled" name="terminal_enabled" value="1" checked>
                         Enable web terminal for this project
                     </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="p-env-mode">Managed .env</label>
+                    <select id="p-env-mode" name="env_mode" class="form-control">
+                        <option value="none">Disabled — manage .env manually</option>
+                        <option value="managed">Enabled — write .env from dashboard on every deploy</option>
+                    </select>
+                    <small class="form-hint">When enabled, configure keys and values via the <a href="env_manager.php" style="color:#3ecf8e;">Env Manager</a>.</small>
                 </div>
 
                 <div class="alert alert-danger" id="project-form-error" hidden></div>

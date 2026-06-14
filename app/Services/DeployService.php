@@ -111,8 +111,18 @@ class DeployService
             }
 
             // ---- Step 6: Clear target directory ----------------------------
-            $targetDir = $project['target_path'];
-            $skipPaths = ($mode === 'safe') ? Project::getSafeKeepPaths($project) : [];
+            $targetDir  = $project['target_path'];
+            $skipPaths  = ($mode === 'safe') ? Project::getSafeKeepPaths($project) : [];
+            $envManaged = ($project['env_mode'] ?? 'none') === 'managed';
+
+            // When env manager is active, .env is written fresh every deploy —
+            // remove it from safe_keep so the old file doesn't persist.
+            if ($envManaged) {
+                $skipPaths = array_values(array_filter(
+                    $skipPaths,
+                    fn (string $p) => ltrim($p, '/') !== '.env'
+                ));
+            }
 
             if ($mode === 'safe' && !empty($skipPaths)) {
                 DeploymentLog::info($deploymentId, "Preserving paths: " . implode(', ', $skipPaths));
@@ -135,6 +145,27 @@ class DeployService
             // so they are never deleted, overwritten, or moved — only backed up.
             DeploymentLog::info($deploymentId, "Copying new files to target...");
             $this->fileManager->copyContents($extractedRoot, $targetDir, $skipPaths);
+
+            // ---- Step 7b: Write managed .env -------------------------------
+            if ($envManaged) {
+                $missing = EnvVar::missingRequired((int) $project['id']);
+                if (!empty($missing)) {
+                    throw new RuntimeException(
+                        'Managed .env has missing required value(s): ' . implode(', ', $missing)
+                    );
+                }
+
+                $envVarsAll    = EnvVar::allForProject((int) $project['id']);
+                $dotEnvContent = EnvVar::renderDotEnv(
+                    (int) $project['id'],
+                    $project['env_template'] ?? null
+                );
+                $dotEnvPath = rtrim($targetDir, '/\\') . DIRECTORY_SEPARATOR . '.env';
+                if (file_put_contents($dotEnvPath, $dotEnvContent) === false) {
+                    throw new RuntimeException("Failed to write managed .env to: {$dotEnvPath}");
+                }
+                DeploymentLog::info($deploymentId, "Wrote managed .env (" . count($envVarsAll) . " variable(s)) to target.");
+            }
 
             // ---- Step 7a: Run pre-deploy hooks -----------------------------
             $hookRunner = new HookRunner();

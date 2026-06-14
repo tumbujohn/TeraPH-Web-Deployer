@@ -269,6 +269,107 @@ function time_ago(?string $datetime): string
     };
 }
 
+// =============================================================================
+// .env Encryption Helpers
+// =============================================================================
+
+/**
+ * Derives a 32-byte AES key from SECRET_KEY (or APP_PASSWORD_HASH fallback).
+ */
+function env_encryption_key(): string
+{
+    $secret = (defined('SECRET_KEY') && SECRET_KEY !== '') ? SECRET_KEY : APP_PASSWORD_HASH;
+    return substr(hash('sha256', $secret . ':teraph:env', true), 0, 32);
+}
+
+/**
+ * Encrypts a plain-text env value with AES-256-CBC.
+ * Returns base64-encoded IV + ciphertext, or empty string for empty input.
+ */
+function env_encrypt(string $value): string
+{
+    if ($value === '') return '';
+    $key = env_encryption_key();
+    $iv  = random_bytes(16);
+    $enc = openssl_encrypt($value, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+    return base64_encode($iv . $enc);
+}
+
+/**
+ * Decrypts a value produced by env_encrypt(). Returns empty string on failure.
+ */
+function env_decrypt(string $enc): string
+{
+    if ($enc === '') return '';
+    $key  = env_encryption_key();
+    $raw  = base64_decode($enc, true);
+    if ($raw === false || strlen($raw) <= 16) return '';
+    $iv   = substr($raw, 0, 16);
+    $data = substr($raw, 16);
+    $dec  = openssl_decrypt($data, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+    return $dec !== false ? $dec : '';
+}
+
+/**
+ * Parses a .env / .env.example string and returns an ordered list of key names.
+ * Blank lines and comment lines are skipped; only KEY= lines are returned.
+ *
+ * @return string[]
+ */
+function env_parse_keys(string $template): array
+{
+    $keys = [];
+    foreach (explode("\n", $template) as $line) {
+        $line = rtrim($line);
+        if ($line === '' || str_starts_with($line, '#')) continue;
+        $eq = strpos($line, '=');
+        if ($eq === false) continue;
+        $key = trim(substr($line, 0, $eq));
+        if ($key !== '' && preg_match('/^[A-Z0-9_]+$/i', $key)) {
+            $keys[] = $key;
+        }
+    }
+    return array_values(array_unique($keys));
+}
+
+/**
+ * Renders a .env file string by merging stored values into a template.
+ * Lines that match KEY= (with any value) have their value replaced by $values[$key].
+ * Comment and blank lines are preserved as-is.
+ *
+ * @param string   $template  The .env.example template string
+ * @param string[] $values    Map of KEY => plain-text value
+ */
+function env_render(string $template, array $values): string
+{
+    $lines  = explode("\n", $template);
+    $output = [];
+    foreach ($lines as $line) {
+        $trimmed = rtrim($line);
+        if ($trimmed === '' || str_starts_with($trimmed, '#')) {
+            $output[] = $trimmed;
+            continue;
+        }
+        $eq = strpos($trimmed, '=');
+        if ($eq === false) {
+            $output[] = $trimmed;
+            continue;
+        }
+        $key = trim(substr($trimmed, 0, $eq));
+        if (isset($values[$key])) {
+            $val = $values[$key];
+            // Quote values that contain spaces or special chars
+            if (preg_match('/[\s"\'#]/', $val)) {
+                $val = '"' . addcslashes($val, '"\\') . '"';
+            }
+            $output[] = $key . '=' . $val;
+        } else {
+            $output[] = $trimmed;
+        }
+    }
+    return implode("\n", $output);
+}
+
 /**
  * Returns a CSS class name for a deployment status badge.
  */
