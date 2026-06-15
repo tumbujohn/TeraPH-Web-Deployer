@@ -31,6 +31,31 @@ class HookRunner
     }
 
     /**
+     * Builds a safe environment array for proc_open.
+     *
+     * Inherits the current process environment (preserving PATH, PHPRC, etc.)
+     * and ensures COMPOSER_HOME is set — web server processes often run without
+     * HOME, which causes Composer to abort with "HOME env var must be set".
+     *
+     * @return array<string, string>
+     */
+    public static function buildEnv(): array
+    {
+        $env = getenv() ?: [];
+
+        if (empty($env['HOME']) && empty($env['COMPOSER_HOME'])) {
+            $base                   = defined('TMP_PATH') ? TMP_PATH : sys_get_temp_dir();
+            $env['HOME']            = $base;
+            $env['COMPOSER_HOME']   = $base . '/composer';
+        } elseif (empty($env['COMPOSER_HOME'])) {
+            $base                   = defined('TMP_PATH') ? TMP_PATH : sys_get_temp_dir();
+            $env['COMPOSER_HOME']   = $base . '/composer';
+        }
+
+        return $env;
+    }
+
+    /**
      * Runs a single shell command in $cwd, streaming output via $logger callback.
      *
      * The {composer} placeholder in $command is resolved via resolveComposer().
@@ -52,7 +77,7 @@ class HookRunner
             2 => ['pipe', 'w'],
         ];
 
-        $process = proc_open($shellCmd, $descriptors, $pipes, $cwd);
+        $process = proc_open($shellCmd, $descriptors, $pipes, $cwd, self::buildEnv());
 
         if (!is_resource($process)) {
             $logger('[ERROR] Failed to start process: ' . $command . "\n");

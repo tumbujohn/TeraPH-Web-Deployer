@@ -110,7 +110,6 @@ echo "➜ $command\n";
 // ---------------------------------------------------------------------------
 // Launch process
 // ---------------------------------------------------------------------------
-$env      = null;
 $shellCmd = (PHP_OS_FAMILY === 'Windows')
     ? 'cmd.exe /c "' . $command . '"'
     : $command;
@@ -121,7 +120,7 @@ $descriptorspec = [
     2 => ['pipe', 'w'],
 ];
 
-$process = proc_open($shellCmd, $descriptorspec, $pipes, $cwd, $env);
+$process = proc_open($shellCmd, $descriptorspec, $pipes, $cwd, HookRunner::buildEnv());
 
 if (!is_resource($process)) {
     echo "\n[ERROR] Failed to start process.\n";
