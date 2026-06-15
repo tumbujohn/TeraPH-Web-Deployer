@@ -20,7 +20,9 @@ app_boot();
 Auth::require();
 
 // PRAC.3 — site-wide terminal kill-switch
-if (!defined('TERMINAL_ENABLED') || !TERMINAL_ENABLED) {
+// Only block if EXPLICITLY set to false — undefined means enabled (backward compat
+// with config.php files generated before TERMINAL_ENABLED was added to the example).
+if (defined('TERMINAL_ENABLED') && !TERMINAL_ENABLED) {
     http_response_code(403);
     exit("Terminal is disabled on this installation.\n");
 }
@@ -67,6 +69,7 @@ $auditUser = $_SESSION['username'] ?? 'unknown';
 $auditIp   = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 $auditAt   = date('Y-m-d H:i:s');
 $logId     = null;
+$pdo       = null;
 
 try {
     $pdo  = Database::connect();

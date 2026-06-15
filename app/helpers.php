@@ -114,12 +114,20 @@ function app_boot(): void
     // Bootstrap loads config + all classes (single source of truth)
     require_once $root . '/app/bootstrap.php';
 
-    // Run migrations (idempotent — safe to call on every request).
-    // Output is buffered and discarded so no migration echo can corrupt AJAX responses.
+    // Run all migrations in order (all are idempotent — safe on every request).
+    // Output is buffered so no migration echo can corrupt AJAX responses.
+    // Running the full set ensures new migrations are applied automatically
+    // after a self-update, without requiring a manual visit to migrate.php.
     static $migrated = false;
     if (!$migrated) {
         ob_start();
-        require_once $root . '/migrations/001_initial_schema.php';
+        $migFiles = glob($root . '/migrations/*.php');
+        if ($migFiles) {
+            sort($migFiles);
+            foreach ($migFiles as $migFile) {
+                require_once $migFile;
+            }
+        }
         ob_end_clean();
         $migrated = true;
     }

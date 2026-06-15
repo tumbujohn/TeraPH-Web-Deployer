@@ -331,6 +331,7 @@ $csrf     = csrf_token();
 
                 <div class="form-group">
                     <label class="form-check-label">
+                        <input type="hidden" name="terminal_enabled" value="0">
                         <input type="checkbox" id="p-terminal-enabled" name="terminal_enabled" value="1" checked>
                         Enable web terminal for this project
                     </label>
