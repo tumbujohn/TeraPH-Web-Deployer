@@ -170,6 +170,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $project) {
         header('Location: env_manager.php?project_id=' . $projectId);
         exit;
     }
+
+    // ---- Rename key ---------------------------------------------------------
+    // Renames a key while preserving its encrypted value, sort order, and
+    // required flag. Also updates the template text so the structure stays in
+    // sync with the key list.
+    if ($postAction === 'rename_key') {
+        $oldKey = $_POST['old_key'] ?? '';
+        $newKey = trim($_POST['new_key'] ?? '');
+
+        if ($oldKey === '' || $newKey === '') {
+            flash('error', 'Both old and new key names are required.');
+        } elseif (preg_match('/[\s#=]/', $newKey)) {
+            flash('error', 'New key name cannot contain spaces, # or =.');
+        } else {
+            $existingKeys = array_column(EnvVar::allForProject($projectId), 'key_name');
+            if (!in_array($oldKey, $existingKeys, true)) {
+                flash('error', "Key '{$oldKey}' not found.");
+            } elseif (in_array($newKey, $existingKeys, true) && $newKey !== $oldKey) {
+                flash('error', "Key '{$newKey}' already exists.");
+            } else {
+                $pdo = Database::connect();
+                $pdo->prepare("
+                    UPDATE project_env_vars SET key_name = ? WHERE project_id = ? AND key_name = ?
+                ")->execute([$newKey, $projectId, $oldKey]);
+
+                // Update key name in template text too
+                if (!empty($project['env_template'])) {
+                    $tpl = preg_replace(
+                        '/^((?:export\s+)?)' . preg_quote($oldKey, '/') . '(=)/m',
+                        '${1}' . $newKey . '${2}',
+                        $project['env_template']
+                    );
+                    if ($tpl !== $project['env_template']) {
+                        $pdo->prepare("UPDATE projects SET env_template = ?, updated_at = ? WHERE id = ?")
+                            ->execute([$tpl, date('Y-m-d H:i:s'), $projectId]);
+                    }
+                }
+
+                flash('success', "Key renamed '{$oldKey}' → '{$newKey}'.");
+            }
+        }
+        header('Location: env_manager.php?project_id=' . $projectId);
+        exit;
+    }
 }
 
 // =============================================================================
@@ -413,6 +457,14 @@ $exampleExists = $project &&
                 <input type="hidden" name="del_key" id="del-key-name" value="">
             </form>
 
+            <!-- Shared rename form — submitted by renameKey() -->
+            <form method="post" id="rename-key-form" style="display:none;">
+                <?= $csrfField ?>
+                <input type="hidden" name="form_action" value="rename_key">
+                <input type="hidden" name="old_key" id="rename-old-key" value="">
+                <input type="hidden" name="new_key" id="rename-new-key" value="">
+            </form>
+
             <div class="env-card env-full">
                 <h3>
                     Values
@@ -432,7 +484,7 @@ $exampleExists = $project &&
                     <table class="key-table">
                         <thead>
                             <tr>
-                                <th style="width:28%">Key</th>
+                                <th style="width:30%">Key</th>
                                 <th>Value</th>
                                 <th style="width:60px; text-align:center;">Req.</th>
                                 <th style="width:80px;">
@@ -445,7 +497,15 @@ $exampleExists = $project &&
                             <?php foreach ($envVars as $var): ?>
                             <tr>
                                 <td>
-                                    <span class="key-name"><?= h($var['key_name']) ?></span>
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <span class="key-name"><?= h($var['key_name']) ?></span>
+                                        <button type="button"
+                                                onclick="renameKey(<?= json_encode($var['key_name']) ?>)"
+                                                title="Rename key"
+                                                style="background:none; border:none; color:#555; cursor:pointer;
+                                                       font-size:11px; padding:0; line-height:1;"
+                                                >✎</button>
+                                    </div>
                                 </td>
                                 <td>
                                     <div class="val-wrap">
@@ -557,6 +617,15 @@ function confirmDelete(key) {
     if (!confirm('Delete key "' + key + '"?\n\nThis permanently removes the key and its encrypted value.')) return;
     document.getElementById('del-key-name').value = key;
     document.getElementById('del-key-form').submit();
+}
+
+// Rename a key — prompts for new name then submits the shared rename-key-form
+function renameKey(oldKey) {
+    const newKey = prompt('Rename "' + oldKey + '" to:', oldKey);
+    if (!newKey || newKey.trim() === '' || newKey.trim() === oldKey) return;
+    document.getElementById('rename-old-key').value = oldKey;
+    document.getElementById('rename-new-key').value = newKey.trim();
+    document.getElementById('rename-key-form').submit();
 }
 </script>
 </body>

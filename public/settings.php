@@ -67,6 +67,7 @@ $totalBackupSize = (int) array_sum($backupZips);
 // ---- Integrations ----------------------------------------------------------
 $hasGlobalPat     = defined('GITHUB_PAT')     && trim(GITHUB_PAT) !== '';
 $hasWebhookSecret = defined('WEBHOOK_SECRET') && trim(WEBHOOK_SECRET) !== '';
+$hasSecretKey     = defined('SECRET_KEY')     && SECRET_KEY !== '';
 
 $csrfToken = csrf_token();
 ?>
@@ -198,6 +199,15 @@ $csrfToken = csrf_token();
             <div class="settings-card">
                 <p class="settings-section-title">Integrations</p>
                 <dl class="settings-list">
+                    <dt>Secret Key</dt>
+                    <dd>
+                        <?php if ($hasSecretKey): ?>
+                            <span class="badge badge-success">Set</span>
+                        <?php else: ?>
+                            <span class="badge badge-danger">Not set</span>
+                            <span style="font-size:11px; color:#ef4444; margin-left:6px;">env vars at risk if password changes</span>
+                        <?php endif; ?>
+                    </dd>
                     <dt>Global PAT</dt>
                     <dd>
                         <?php if ($hasGlobalPat): ?>

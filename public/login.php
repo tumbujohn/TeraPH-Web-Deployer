@@ -13,15 +13,22 @@ if (Auth::check()) {
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
+    // CSRF check on login prevents login-CSRF (attacker tricking victim into
+    // authenticating as the attacker's account).
+    $token = $_POST['_csrf'] ?? '';
+    if (!hash_equals(csrf_token(), $token)) {
+        $error = 'Invalid request. Please try again.';
+    } else {
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
 
-    if (Auth::attempt($username, $password)) {
-        header('Location: index.php');
-        exit;
+        if (Auth::attempt($username, $password)) {
+            header('Location: index.php');
+            exit;
+        }
+
+        $error = 'Invalid credentials. Please try again.';
     }
-
-    $error = 'Invalid credentials. Please try again.';
 }
 ?>
 <!DOCTYPE html>
@@ -50,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <form method="POST" action="login.php" class="auth-form" autocomplete="off">
+            <input type="hidden" name="_csrf" value="<?= h(csrf_token()) ?>">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input

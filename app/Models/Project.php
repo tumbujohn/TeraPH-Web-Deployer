@@ -179,10 +179,13 @@ class Project
     }
 
     /**
-     * Deletes a project by ID. Associated deployments and logs are retained.
+     * Deletes a project by ID and all associated env vars.
+     * Deployments and logs are retained for audit purposes.
      */
     public static function delete(int $id): void
     {
+        EnvVar::deleteAllForProject($id);
+
         $pdo  = Database::connect();
         $stmt = $pdo->prepare("DELETE FROM projects WHERE id = :id");
         $stmt->execute([':id' => $id]);
