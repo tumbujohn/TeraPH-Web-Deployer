@@ -291,30 +291,53 @@ function env_encryption_key(): string
 }
 
 /**
- * Encrypts a plain-text env value with AES-256-CBC.
- * Returns base64-encoded IV + ciphertext, or empty string for empty input.
+ * Encrypts a plain-text env value with AES-256-GCM (authenticated encryption).
+ * Returns 'g:' + base64(nonce[12] + tag[16] + ciphertext), or '' for empty input.
+ * Legacy values encrypted with AES-256-CBC are still readable by env_decrypt().
  */
 function env_encrypt(string $value): string
 {
     if ($value === '') return '';
-    $key = env_encryption_key();
-    $iv  = random_bytes(16);
-    $enc = openssl_encrypt($value, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
-    return base64_encode($iv . $enc);
+    $key   = env_encryption_key();
+    $nonce = random_bytes(12);
+    $tag   = '';
+    $ct    = openssl_encrypt($value, 'AES-256-GCM', $key, OPENSSL_RAW_DATA, $nonce, $tag, '', 16);
+    if ($ct === false) {
+        // GCM unavailable on this host (very old OpenSSL) — fall back to CBC
+        $iv  = random_bytes(16);
+        $enc = openssl_encrypt($value, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+        return base64_encode($iv . (string) $enc);
+    }
+    return 'g:' . base64_encode($nonce . $tag . $ct);
 }
 
 /**
- * Decrypts a value produced by env_encrypt(). Returns empty string on failure.
+ * Decrypts a value produced by env_encrypt().
+ * Supports both AES-256-GCM (prefixed 'g:') and legacy AES-256-CBC (no prefix).
+ * Returns empty string on failure or empty input.
  */
 function env_decrypt(string $enc): string
 {
     if ($enc === '') return '';
-    $key  = env_encryption_key();
-    $raw  = base64_decode($enc, true);
+    $key = env_encryption_key();
+
+    if (str_starts_with($enc, 'g:')) {
+        // AES-256-GCM — nonce[12] + tag[16] + ciphertext
+        $raw = base64_decode(substr($enc, 2), true);
+        if ($raw === false || strlen($raw) <= 28) return '';
+        $nonce = substr($raw, 0, 12);
+        $tag   = substr($raw, 12, 16);
+        $ct    = substr($raw, 28);
+        $dec   = openssl_decrypt($ct, 'AES-256-GCM', $key, OPENSSL_RAW_DATA, $nonce, $tag);
+        return $dec !== false ? $dec : '';
+    }
+
+    // Legacy AES-256-CBC (no prefix) — iv[16] + ciphertext
+    $raw = base64_decode($enc, true);
     if ($raw === false || strlen($raw) <= 16) return '';
-    $iv   = substr($raw, 0, 16);
-    $data = substr($raw, 16);
-    $dec  = openssl_decrypt($data, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+    $iv  = substr($raw, 0, 16);
+    $ct  = substr($raw, 16);
+    $dec = openssl_decrypt($ct, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
     return $dec !== false ? $dec : '';
 }
 
@@ -341,6 +364,79 @@ function env_parse_keys(string $template): array
         }
     }
     return array_values(array_unique($keys));
+}
+
+/**
+ * Parses a .env / .env.example string and returns an ordered map of key => plain value.
+ * Blank lines and comment lines are skipped. Values are unquoted via env_unquote().
+ * Keys with empty values are still included (value = '').
+ *
+ * @return array<string, string>
+ */
+function env_parse_pairs(string $template): array
+{
+    $pairs = [];
+    foreach (explode("\n", $template) as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) continue;
+        $line = (string) preg_replace('/^export\s+/i', '', $line);
+        $eq   = strpos($line, '=');
+        if ($eq === false) continue;
+        $key = rtrim(substr($line, 0, $eq));
+        if ($key === '' || preg_match('/[\s#=]/', $key)) continue;
+        if (!array_key_exists($key, $pairs)) {
+            $pairs[$key] = env_unquote(substr($line, $eq + 1));
+        }
+    }
+    return $pairs;
+}
+
+/**
+ * Strips surrounding quotes from a raw .env value and removes trailing inline comments.
+ * Handles double-quoted (with escape sequences), single-quoted (literal), and bare values.
+ */
+function env_unquote(string $raw): string
+{
+    $v = trim($raw);
+    if ($v === '') return '';
+
+    // Double-quoted: "value" — process escape sequences inside
+    if ($v[0] === '"') {
+        $i     = 1;
+        $inner = '';
+        $len   = strlen($v);
+        while ($i < $len) {
+            $c = $v[$i];
+            if ($c === '\\' && $i + 1 < $len) {
+                $inner .= match($v[$i + 1]) {
+                    '"'     => '"',
+                    '\\'    => '\\',
+                    'n'     => "\n",
+                    'r'     => "\r",
+                    't'     => "\t",
+                    default => '\\' . $v[$i + 1],
+                };
+                $i += 2;
+                continue;
+            }
+            if ($c === '"') break; // closing quote
+            $inner .= $c;
+            $i++;
+        }
+        return $inner;
+    }
+
+    // Single-quoted: 'value' — literal, no escaping
+    if ($v[0] === "'") {
+        $end = strrpos($v, "'");
+        return $end > 0 ? substr($v, 1, $end - 1) : substr($v, 1);
+    }
+
+    // Bare value — strip trailing inline comment (space followed by #)
+    if (($pos = strpos($v, ' #')) !== false) {
+        $v = rtrim(substr($v, 0, $pos));
+    }
+    return $v;
 }
 
 /**
