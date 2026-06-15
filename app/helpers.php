@@ -320,11 +320,12 @@ function env_parse_keys(string $template): array
 {
     $keys = [];
     foreach (explode("\n", $template) as $line) {
-        $line = rtrim($line);
+        $line = trim($line);                                    // full trim catches indented comments
         if ($line === '' || str_starts_with($line, '#')) continue;
+        $line = (string) preg_replace('/^export\s+/i', '', $line); // strip bash 'export KEY=' prefix
         $eq = strpos($line, '=');
         if ($eq === false) continue;
-        $key = trim(substr($line, 0, $eq));
+        $key = rtrim(substr($line, 0, $eq));
         if ($key !== '' && preg_match('/^[A-Z0-9_]+$/i', $key)) {
             $keys[] = $key;
         }
@@ -345,26 +346,30 @@ function env_render(string $template, array $values): string
     $lines  = explode("\n", $template);
     $output = [];
     foreach ($lines as $line) {
-        $trimmed = rtrim($line);
+        $rtrimmed = rtrim($line);
+        $trimmed  = ltrim($rtrimmed);       // fully trimmed for logic checks
         if ($trimmed === '' || str_starts_with($trimmed, '#')) {
-            $output[] = $trimmed;
+            $output[] = $rtrimmed;          // preserve blank/comment lines verbatim
             continue;
         }
-        $eq = strpos($trimmed, '=');
+        // Detect and strip optional 'export ' prefix; re-apply it in output
+        $hasExport = (bool) preg_match('/^export\s+/i', $trimmed);
+        $bare      = $hasExport ? (string) preg_replace('/^export\s+/i', '', $trimmed) : $trimmed;
+        $eq        = strpos($bare, '=');
         if ($eq === false) {
-            $output[] = $trimmed;
+            $output[] = $rtrimmed;
             continue;
         }
-        $key = trim(substr($trimmed, 0, $eq));
+        $key = rtrim(substr($bare, 0, $eq));
         if (isset($values[$key])) {
             $val = $values[$key];
             // Quote values that contain spaces or special chars
             if (preg_match('/[\s"\'#]/', $val)) {
                 $val = '"' . addcslashes($val, '"\\') . '"';
             }
-            $output[] = $key . '=' . $val;
+            $output[] = ($hasExport ? 'export ' : '') . $key . '=' . $val;
         } else {
-            $output[] = $trimmed;
+            $output[] = $rtrimmed;
         }
     }
     return implode("\n", $output);

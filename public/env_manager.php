@@ -451,7 +451,7 @@ $csrfField = csrf_field();
                           ));
                     // Mask values in preview
                     $previewMasked = preg_replace_callback(
-                        '/^([A-Z0-9_]+=)(.+)$/m',
+                        '/^((?:export\s+)?[A-Za-z_][A-Za-z0-9_]*=)(.+)$/m',
                         fn($m) => $m[1] . '***',
                         $preview
                     );
