@@ -146,6 +146,25 @@ class DeployService
             DeploymentLog::info($deploymentId, "Copying new files to target...");
             $this->fileManager->copyContents($extractedRoot, $targetDir, $skipPaths);
 
+            // ---- Step 7c: Guarantee safe-keep directories exist -------------
+            // safe_keep is "preserve what exists". On first deploy, gitignored
+            // directories (writable/, uploads/, storage/, …) are absent from
+            // the repo so copyContents() never creates them. Hooks like
+            // "php spark migrate" need them to exist before they run.
+            // Creating them here is idempotent: mkdir is a no-op when the dir
+            // already exists and all subsequent deploys take the same path.
+            foreach ($skipPaths as $safePath) {
+                $normalized = str_replace(DIRECTORY_SEPARATOR, '/', $safePath);
+                if (!str_ends_with($normalized, '/')) {
+                    continue; // plain files (.env, etc.) — let repo or env manager own them
+                }
+                $fullPath = rtrim($targetDir, '/\\') . '/' . rtrim($normalized, '/');
+                if (!is_dir($fullPath)) {
+                    @mkdir($fullPath, 0755, true);
+                    DeploymentLog::info($deploymentId, "Safe-keep: created missing directory {$normalized}");
+                }
+            }
+
             // ---- Step 7b: Write managed .env -------------------------------
             if ($envManaged) {
                 $missing = EnvVar::missingRequired((int) $project['id']);
@@ -186,7 +205,7 @@ class DeployService
 
             // ---- Step 8: Set permissions -----------------------------------
             DeploymentLog::info($deploymentId, "Setting file permissions (dirs: 755, files: 644)...");
-            $this->fileManager->setPermissions($targetDir);
+            $this->fileManager->setPermissions($targetDir, $skipPaths);
 
             // ---- Step 8a: Run post-deploy hooks ----------------------------
             $postHooks = Project::getDeployHooks($project, 'post');

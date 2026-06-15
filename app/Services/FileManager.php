@@ -159,15 +159,24 @@ class FileManager
     /**
      * Sets file permissions recursively on a target directory.
      *
-     * Directories → 0755, Files → 0644
+     * Directories → 0755, Files → 0644.
+     * Safe-keep paths are excluded — their permissions are user-managed and
+     * must not be reset by a deploy.
      *
-     * @param string $dir  Root directory to chmod recursively
+     * @param string   $dir       Root directory to chmod recursively
+     * @param string[] $skipPaths Relative paths to leave untouched (safe_keep)
      */
-    public function setPermissions(string $dir): void
+    public function setPermissions(string $dir, array $skipPaths = []): void
     {
         if (!is_dir($dir)) {
             return;
         }
+
+        $realDir = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', realpath($dir) ?: $dir), '/');
+        $skipAbs = array_map(
+            fn($p) => $realDir . '/' . trim(str_replace(DIRECTORY_SEPARATOR, '/', $p), '/'),
+            $skipPaths
+        );
 
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
@@ -175,6 +184,14 @@ class FileManager
         );
 
         foreach ($iterator as $item) {
+            $path = str_replace(DIRECTORY_SEPARATOR, '/', $item->getRealPath());
+
+            foreach ($skipAbs as $skip) {
+                if ($path === $skip || str_starts_with($path, $skip . '/')) {
+                    continue 2;
+                }
+            }
+
             if ($item->isDir()) {
                 @chmod($item->getRealPath(), 0755);
             } else {
