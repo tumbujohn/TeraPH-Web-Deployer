@@ -149,8 +149,13 @@ class FileManager
             if ($item->isDir() && !$item->isLink()) {
                 @rmdir($path);
             } else {
-                if (!@unlink($path)) {
-                    throw new RuntimeException("Cannot delete file: {$path}");
+                // Symlinks: unlink the symlink itself (getPathname), not the resolved
+                // target (getRealPath), so we never try to delete outside the webroot.
+                $unlinkPath = $item->isLink()
+                    ? str_replace(DIRECTORY_SEPARATOR, '/', $item->getPathname())
+                    : $path;
+                if (!@unlink($unlinkPath)) {
+                    throw new RuntimeException("Cannot delete file: {$unlinkPath}");
                 }
             }
         }
@@ -222,7 +227,7 @@ class FileManager
             if ($item->isDir() && !$item->isLink()) {
                 @rmdir($item->getRealPath());
             } else {
-                @unlink($item->getRealPath());
+                @unlink($item->isLink() ? $item->getPathname() : $item->getRealPath());
             }
         }
 
