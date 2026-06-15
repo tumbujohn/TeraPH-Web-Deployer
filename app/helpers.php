@@ -326,7 +326,9 @@ function env_parse_keys(string $template): array
         $eq = strpos($line, '=');
         if ($eq === false) continue;
         $key = rtrim(substr($line, 0, $eq));
-        if ($key !== '' && preg_match('/^[A-Z0-9_]+$/i', $key)) {
+        // Accept any non-empty key that has no whitespace, #, or = — covers
+        // lowercase, mixed-case, dots, hyphens, etc. used by various frameworks
+        if ($key !== '' && !preg_match('/[\s#=]/', $key)) {
             $keys[] = $key;
         }
     }
