@@ -28,4 +28,5 @@ build/
 node_modules/
 
 # --- Claude AI workspace file ---
+.claude/
 CLAUDE.md
