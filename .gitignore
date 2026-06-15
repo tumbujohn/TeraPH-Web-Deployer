@@ -1,29 +1,31 @@
-# Ignore dependency directories
-node_modules/
-env/
-venv/
+# ============================================================
+# TeraPH Web Deployer — .gitignore
+# ============================================================
 
-# Ignore sensitive environment variables
-.env
-.env.local
+# --- Sensitive config (never commit) ---
+config.php
 
-# Ignore Operating System files
+# --- Database (environment-specific, never share across installs) ---
+storage/deployer.db
+storage/*.db
+
+# --- Storage runtime content (logs, backups, uploads, cache) ---
+# Each subdirectory keeps its own .gitignore so the dir is tracked but contents are not.
+storage/deploy_strategy.txt
+
+# --- OS files ---
 .DS_Store
 Thumbs.db
 
-# Ignore log files and build folders
-*.log
+# --- IDE / editor ---
+.vscode/
+*.swp
+*.swo
+
+# --- Build output ---
 dist/
 build/
+node_modules/
 
-# ignore application-specific files
-storage/deployer.db
-/public/update.php
-
-# Ignore IDE and editor files
-
-# For Visual Studio Code
-.vscode/
-
-# Claude AI
+# --- Claude AI workspace file ---
 CLAUDE.md

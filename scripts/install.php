@@ -262,18 +262,23 @@ function inst_run(string $installDir, string $adminUser, string $adminPass, stri
             ) ?? $cfg;
         }
 
-        // DEPLOYER_ROOT: may be an expression (dirname(__DIR__)) — replace the whole define
+        // DEPLOYER_ROOT: the example value is dirname(__DIR__) — nested parens.
+        // Match the entire line with the `m` flag so nested parens don't confuse [^)]+.
         $cfg = preg_replace(
-            "/define\('DEPLOYER_ROOT',\s*[^)]+\)/",
-            "define('DEPLOYER_ROOT', '" . addslashes($deployerRoot) . "')",
+            "/^define\('DEPLOYER_ROOT',.+$/m",
+            "define('DEPLOYER_ROOT', '" . addslashes($deployerRoot) . "');",
             $cfg
         ) ?? $cfg;
 
-        // Production defaults
-        $cfg = preg_replace("/define\('DEV_MODE',\s*true\)/", "define('DEV_MODE', false)", $cfg) ?? $cfg;
+        // Production defaults — also use full-line match to avoid nested-paren issues
         $cfg = preg_replace(
-            "/define\('CURL_SSL_VERIFY',\s*[^)]+\)/",
-            "define('CURL_SSL_VERIFY', true)",
+            "/^define\('DEV_MODE',.+$/m",
+            "define('DEV_MODE', false);",
+            $cfg
+        ) ?? $cfg;
+        $cfg = preg_replace(
+            "/^define\('CURL_SSL_VERIFY',.+$/m",
+            "define('CURL_SSL_VERIFY', true);",
             $cfg
         ) ?? $cfg;
 
