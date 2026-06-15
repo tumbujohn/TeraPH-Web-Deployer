@@ -515,7 +515,7 @@
             post: 'php artisan queue:restart\nphp artisan cache:clear',
         },
         codeigniter: {
-            pre:  '{composer} install --no-dev\nphp spark migrate',
+            pre:  '{composer} install --no-dev\nmkdir -p writable/cache writable/logs writable/session writable/uploads\nphp spark migrate',
             post: '',
         },
         wordpress: {
