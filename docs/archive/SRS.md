@@ -1,3 +1,10 @@
+> **Archived.** This was the original Phase 1 SRS (2026-04-21), written before manual-upload
+> source, deploy hooks/templates, the web terminal, the .env manager, and self-protection
+> existed. See [../REQUIREMENTS.md](../REQUIREMENTS.md) for the current requirements baseline.
+> Kept for historical reference only.
+
+---
+
 # TeraPH Web Deployer
 ## Software Requirements Specification (SRS)
 

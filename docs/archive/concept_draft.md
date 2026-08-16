@@ -1,3 +1,10 @@
+> **Archived.** This was the original Phase 1 concept draft (2026-04-21). It no longer
+> reflects the current implementation. See [../ARCHITECTURE.md](../ARCHITECTURE.md) for the
+> current architecture and [../DECISIONS.md](../DECISIONS.md) for how the design evolved.
+> Kept for historical reference only.
+
+---
+
 # TeraPH Web Deployer — Software Concept & Architecture Specification
 
 **Document Type:** Concept & Architecture Specification  

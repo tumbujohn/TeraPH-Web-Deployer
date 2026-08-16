@@ -1,3 +1,11 @@
+> **Archived.** PRAC tier (self-protection, deploy strategy, terminal hardening, deploy
+> templates) is fully implemented — see [prac_tracker.md](prac_tracker.md) and
+> [../PROGRESS.md](../PROGRESS.md). The P0/P1/P2/ENG tiers below are still the roadmap;
+> current open-item tracking lives in [../TODO.md](../TODO.md). Kept for the full original
+> design rationale on items not yet re-documented elsewhere.
+
+---
+
 # TeraPH Web Deployer — Improvement & Hardening Plan
 
 **Document Type:** Engineering Roadmap & Improvement Plan

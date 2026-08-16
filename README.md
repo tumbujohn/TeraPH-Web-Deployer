@@ -21,14 +21,16 @@ The Goal: TeraPH WD should be the best deploy panel for shared/cPanel PHP hostin
 8. [Deployment Modes](#deployment-modes)
 9. [Deploy Templates](#deploy-templates)
 10. [Deploy Hooks](#deploy-hooks)
-11. [Web Terminal](#web-terminal)
-12. [Deployer Self-Protection](#deployer-self-protection)
-13. [Deploy Strategy](#deploy-strategy)
-14. [General Settings](#general-settings)
-15. [CLI Reference](#cli-reference)
-16. [Project Structure](#project-structure)
-17. [Troubleshooting](#troubleshooting)
-18. [Security Checklist](#security-checklist)
+11. [.env Manager](#env-manager)
+12. [Web Terminal](#web-terminal)
+13. [Deployer Self-Protection](#deployer-self-protection)
+14. [Deploy Strategy](#deploy-strategy)
+15. [General Settings](#general-settings)
+16. [CLI Reference](#cli-reference)
+17. [Project Structure](#project-structure)
+18. [Troubleshooting](#troubleshooting)
+19. [Security Checklist](#security-checklist)
+20. [Documentation](#documentation)
 
 ---
 
@@ -503,6 +505,35 @@ Each hook command is subject to `HOOK_TIMEOUT` (default 300 seconds). Set it hig
 
 ---
 
+## .env Manager
+
+Every project has an **.env Manager** page (`env_manager.php`) for editing environment
+variables from the browser instead of hand-editing files on the server.
+
+- **Off by default.** Toggle **Managed .env** on for a project and the deployer writes a
+  fresh `.env` file to the target directory on every deploy from then on.
+- **Template + values.** Paste your `.env.example` (or a full `.env`) into the Template
+  card, or click **Import from .env.example** to read one that already exists in the target
+  directory. Saving extracts every `KEY=value` line; keys are kept in sync automatically —
+  add a line, get a new field; remove a line, the stored value is deleted.
+- **Values are encrypted at rest** (AES-256-GCM) and masked in the UI by default — never
+  written to any deploy log.
+- **Required keys** halt the deploy before any files are touched if left empty.
+
+Set a dedicated encryption key before storing real values:
+
+```php
+// config.php
+define('SECRET_KEY', 'paste output of: php -r "echo bin2hex(random_bytes(32));"');
+```
+
+Without a `SECRET_KEY`, values are encrypted with a key derived from `APP_PASSWORD_HASH` —
+changing the admin password later would make all stored values permanently unreadable. The
+.env Manager shows a warning banner whenever this is the case. Full usage walkthrough:
+[docs/USER.md](docs/USER.md#9-env-manager). Encryption details: [docs/SECURITY.md](docs/SECURITY.md#5-secrets-at-rest).
+
+---
+
 ## Web Terminal
 
 Every project card has a **>_ Terminal** button that opens a web-based shell running commands inside the project's target directory.
@@ -685,10 +716,11 @@ For each stuck deployment it prints the last log entry, marks the status `failed
 │       ├── HookRunner.php         # Pre/post hook execution, {composer} resolution
 │       └── DeployService.php      # 10-step deployment pipeline with self-protection
 │
-├── migrations/                    # NOT web-accessible
+├── migrations/                    # NOT web-accessible — additive-only, re-run every request
 │   ├── 001_initial_schema.php     # Core schema (projects, deployments, logs)
-│   ├── 002_source_type.php        # Manual upload source type
-│   └── 003_project_hooks_terminal.php  # deploy_template, pre/post hooks, terminal_logs
+│   ├── 002_manual_upload_support.php   # Manual upload source type
+│   ├── 003_project_hooks_terminal.php  # deploy_template, pre/post hooks, terminal_logs
+│   └── 004_project_env_manager.php     # env_mode, env_template, project_env_vars
 │
 ├── public/                        # Web root — point your domain here
 │   ├── index.php                  # Dashboard (overlap badge, template form, terminal toolbar)
@@ -697,12 +729,14 @@ For each stuck deployment it prints the last log entry, marks the status `failed
 │   ├── logs.php                   # AJAX: ?deployment_id=X or ?project_id=X
 │   ├── backups.php                # AJAX backup list + restore
 │   ├── projects.php               # AJAX project CRUD (template + hook fields)
-│   ├── settings.php               # General Settings page
+│   ├── settings.php               # General Settings page (read-only install overview)
+│   ├── settings_action.php        # AJAX: clear_tmp, deploy_reconcile
+│   ├── env_manager.php            # .env Manager — per-project template + encrypted values
 │   ├── migrate.php                # Browser-based migration runner
 │   ├── update.php                 # Self-update from GitHub
 │   ├── terminal_execute.php       # Streaming terminal endpoint (audited, guarded)
 │   ├── composer_download.php      # Download + verify composer.phar into a project directory
-│   ├── webhook.php                # Webhook stub (Phase 2)
+│   ├── webhook.php                # Webhook stub (not yet implemented — see docs/TODO.md)
 │   └── assets/
 │       ├── css/app.css
 │       ├── js/app.js              # Deploy flow, project form, template auto-fill
@@ -716,14 +750,25 @@ For each stuck deployment it prints the last log entry, marks the status `failed
 │   ├── deploy_strategy.txt        # Cached symlink capability result (auto mode)
 │   └── deployer.db                # SQLite database (if using SQLite)
 │
+├── scripts/
+│   ├── install.php                # Single-file bootstrap installer
+│   ├── probe.php                  # CLI-only install diagnostics — delete after use
+│   └── reset_db.php               # CLI-only full data wipe for clean testing
+│
 ├── test/
 │   └── bootstrap_test.php         # CLI diagnostic script
 │
-└── docs/
-    ├── improvement_plan.md        # Feature roadmap and prioritised improvements
-    ├── todo.md                    # PRAC implementation tracker
-    ├── concept_draft.md           # Software Concept & Architecture Specification
-    └── SRS.md                     # Software Requirements Specification (IEEE 830)
+└── docs/                          # See "Documentation" section below
+    ├── ARCHITECTURE.md
+    ├── REQUIREMENTS.md
+    ├── DEVELOPMENT.md
+    ├── USER.md
+    ├── PROGRESS.md
+    ├── TODO.md
+    ├── DECISIONS.md
+    ├── CHANGELOG.md
+    ├── SECURITY.md
+    └── archive/                   # Superseded Phase-1 planning documents
 ```
 
 ---
@@ -829,5 +874,27 @@ Before going live, verify each item:
 - [ ] `MAX_BACKUPS_PER_PROJECT` is set to a value your disk can sustain
 - [ ] Run `php test/bootstrap_test.php` — all checks pass
 - [ ] Run `php tera deploy:reconcile` — returns "No stuck deployments found"
+- [ ] A dedicated `SECRET_KEY` is set in `config.php` before storing any real `.env` Manager values
 
- 
+See [docs/SECURITY.md](docs/SECURITY.md) for the full security architecture, including
+known gaps (GitHub PATs are currently stored **unencrypted** — see there for mitigation).
+
+---
+
+## Documentation
+
+This README covers installation and day-to-day configuration. Deeper documentation lives
+under [`/docs`](docs/):
+
+| Document | Purpose |
+| --- | --- |
+| [USER.md](docs/USER.md) | End-user workflows — deploying, backups, terminal, .env manager |
+| [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Setup, conventions, CLI reference, testing, debugging |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data model, pipeline internals |
+| [REQUIREMENTS.md](docs/REQUIREMENTS.md) | Current functional & non-functional requirements |
+| [PROGRESS.md](docs/PROGRESS.md) | What's implemented vs. planned right now |
+| [TODO.md](docs/TODO.md) | Prioritized outstanding work |
+| [DECISIONS.md](docs/DECISIONS.md) | Why things were built the way they were |
+| [CHANGELOG.md](docs/CHANGELOG.md) | Historical record of meaningful changes |
+| [SECURITY.md](docs/SECURITY.md) | Security architecture, controls, known limitations |
+| [archive/](docs/archive/) | Superseded Phase-1 planning documents, kept for history |

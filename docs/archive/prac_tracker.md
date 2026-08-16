@@ -1,3 +1,9 @@
+> **Archived.** All PRAC items below are complete and superseded by the codebase itself.
+> See [../PROGRESS.md](../PROGRESS.md) for current implementation state and
+> [../TODO.md](../TODO.md) for open work. Kept for historical reference only.
+
+---
+
 # TeraPH Web Deployer — PRAC Implementation Tracker
 
 **Phase:** PRAC (Practical Blockers)
