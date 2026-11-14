@@ -44,6 +44,13 @@ Priority tiers follow the original roadmap naming: **P0** (correctness & safety)
       its own running file (Windows locks it: the copy fails, leaving `public/update.php`, `tera`
       and `scripts/` missing and no way to retry from the UI) — e.g. copy it last under a temporary
       name and rename, or finish the swap in a second request.
+      Also: **refuse to run on a git working copy.** Running Self-Update on a developer checkout
+      deleted `.git/` (`clear()` removes everything except `config.php` and `storage/`) — on a
+      Windows dev machine it removed `HEAD`, `config` and `index`, so git reported "not a
+      repository" and the repo had to be rebuilt from the updater's own pre-update zip. The updater
+      should detect a `.git` directory and stop with a clear message (or at minimum preserve it
+      like `config.php` and `storage/`). More generally, anything else an operator keeps in the
+      install root is deleted, not preserved — consider a configurable extra-preserve list.
 - [ ] **Secure session cookie flag.** Set `cookie_secure => !DEV_MODE` alongside the
       existing `cookie_httponly`/`cookie_samesite` in `app_boot()`.
 - [ ] **P0.1 — Atomic symlink-based releases.** `DEPLOY_STRATEGY` and
