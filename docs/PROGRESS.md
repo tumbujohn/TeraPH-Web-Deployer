@@ -66,6 +66,9 @@ atomic rollback, PAT encryption, and login throttling are not yet in place.
 - [x] **Optional backup `.env` encryption** (`BACKUP_ENCRYPT_ENV`, default off)
 - [x] **Backup restore layout fix** — `extract()` unwraps a folder only when it is the sole
       archive entry; restore never unwraps
+- [x] **Automatic PHP selection for hooks and the terminal** — uses the site's own PHP CLI when the web
+      server's `PATH` finds a different version; per-project binary, global `CLI_PHP_PATH` (path or
+      `system`), shim for non-`php` binary names, Settings shows the choice and the PHP binaries found
 - [x] **General Settings page** — install overview, storage stats, extension checks,
       one-click clear-tmp and deploy-reconcile actions
 - [x] **Project deletion refinement** — deleting a project now removes its `project_env_vars`

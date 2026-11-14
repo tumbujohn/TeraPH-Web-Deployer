@@ -212,12 +212,13 @@ class DeployService
             $preHooks   = Project::getDeployHooks($project, 'pre');
             if (!empty($preHooks)) {
                 DeploymentLog::info($deploymentId, "Running pre-deploy hooks (" . count($preHooks) . " command(s))...");
+                DeploymentLog::info($deploymentId, 'Hooks run PHP ' . HookRunner::describePhp($project['php_binary'] ?? null) . '.');
                 $exit = $hookRunner->runAll($preHooks, $targetDir, function (string $chunk) use ($deploymentId): void {
                     $line = trim($chunk);
                     if ($line !== '') {
                         DeploymentLog::info($deploymentId, $line);
                     }
-                });
+                }, $project['php_binary'] ?? null);
                 if ($exit !== 0) {
                     throw new RuntimeException("Pre-deploy hook failed with exit code {$exit}.");
                 }
@@ -232,12 +233,15 @@ class DeployService
             $postHooks = Project::getDeployHooks($project, 'post');
             if (!empty($postHooks)) {
                 DeploymentLog::info($deploymentId, "Running post-deploy hooks (" . count($postHooks) . " command(s))...");
+                if (empty($preHooks)) {
+                    DeploymentLog::info($deploymentId, 'Hooks run PHP ' . HookRunner::describePhp($project['php_binary'] ?? null) . '.');
+                }
                 $exit = $hookRunner->runAll($postHooks, $targetDir, function (string $chunk) use ($deploymentId): void {
                     $line = trim($chunk);
                     if ($line !== '') {
                         DeploymentLog::info($deploymentId, $line);
                     }
-                });
+                }, $project['php_binary'] ?? null);
                 if ($exit !== 0) {
                     throw new RuntimeException("Post-deploy hook failed with exit code {$exit}.");
                 }

@@ -10,8 +10,12 @@ tagged releases yet — entries are grouped by date. Format loosely follows
 
 ### Upgrade notes
 Updating an existing install is safe with its old `config.php` and database; migrations 005 and 006 run
-automatically on the next page load. Things worth knowing:
-- **`.env` file mode.** The managed `.env` mode comes from the new `ENV_FILE_MODE` constant. New installs get
+automatically on the next page load (migration 007 as well, for the per-project PHP binary). Things worth knowing:
+- **Hooks may now run a different PHP than before.** If the `php` on your web server's `PATH` was a different
+  version than the one running the site, hooks, Apply now and the terminal now use the site's own PHP. This is
+  the intended fix for Composer version errors; if a project depended on the other PHP, set its own *PHP for
+  hooks & terminal* in the project settings, or set `define('CLI_PHP_PATH', 'system');` to restore the old
+  behavior everywhere.- **`.env` file mode.** The managed `.env` mode comes from the new `ENV_FILE_MODE` constant. New installs get
   `0640` from `config.php.example`; a `config.php` without the constant keeps the previous `0644`. Add
   `define('ENV_FILE_MODE', 0640);` once you've confirmed your app can still read `.env`.
 - **Deploys now stop** (before anything is downloaded or changed) if a managed project has a required key left
@@ -26,7 +30,7 @@ automatically on the next page load. Things worth knowing:
   deployment is running, and give it a minute before judging the result.
 
 ### Added
-- `CLI_PHP_PATH` config option: the PHP CLI that hooks and the terminal use (its directory goes first on `PATH`; `{composer}` uses it). Fixes `composer install` failing platform checks because the web server's `PATH` finds an older default `php` than the site's. Unset = unchanged behavior. Settings → PHP Environment now shows the PHP hooks actually run, flags a mismatch with the web PHP, and suggests a value
+- **Automatic PHP for hooks and the terminal, with per-project choice.** Hooks and the terminal run as child processes of the web server, so a bare `php` followed the web server's `PATH` — often the host's default CLI, not the PHP the site runs on (Composer then failed platform checks while Settings and SSH showed a newer version). The deployer now uses the site's own PHP CLI automatically whenever `php` on `PATH` is a different version. Override per project (new *PHP for hooks & terminal* field, suggests the binaries found on the host) or globally with `CLI_PHP_PATH` (a path, or `'system'` for the old behavior). Settings shows which PHP hooks use and why, flags a mismatch and lists the PHP binaries on the host; deploy logs state it. Migration 007 adds `projects.php_binary`
 - `BACKUP_ENCRYPT_ENV` config option (default `false`) to AES-256 password-protect `.env` files inside backup zips; restore decrypts transparently
 - `ENV_FILE_MODE` config option for the managed `.env` permissions (see upgrade notes)
 - .env Manager **Live .env** card: drift check against the server's `.env` (key names only), **Apply now** (write the `.env` without a deploy, optionally run a stored command; recorded as an `env_apply` deployment) and **Pull from live** (import the target's current `.env`; never deletes; asks before replacing differing stored values)

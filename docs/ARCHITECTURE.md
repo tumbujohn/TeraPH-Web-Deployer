@@ -62,7 +62,7 @@ session. There is no router; each `.php` file under `public/` is its own endpoin
 │       ├── GitHubService.php      # cURL zip/API download with PAT support
 │       ├── FileManager.php        # extract / copyContents / clear / setPermissions
 │       ├── BackupService.php      # Zip backup + restore (deployer-aware, symlink-aware)
-│       ├── HookRunner.php         # proc_open command execution, {composer} resolution, CLI_PHP_PATH
+│       ├── HookRunner.php         # proc_open command execution, {composer} resolution, PHP CLI selection
 │       ├── EnvApplyService.php    # "Apply now": write the managed .env without a deploy
 │       └── DeployService.php      # Deployment pipeline orchestrator
 │
@@ -72,7 +72,8 @@ session. There is no router; each `.php` file under `public/` is its own endpoin
 │   ├── 003_project_hooks_terminal.php
 │   ├── 004_project_env_manager.php
 │   ├── 005_env_apply_command.php
-│   └── 006_scrub_env_templates.php
+│   ├── 006_scrub_env_templates.php
+│   └── 007_project_php_binary.php
 │
 ├── public/                        # Web root — point your domain here
 │   ├── index.php                  # Dashboard: project list, deploy modal, project form
@@ -171,6 +172,7 @@ erDiagram
         VARCHAR env_mode "none | managed"
         TEXT env_template "structure only — values are scrubbed"
         TEXT env_apply_cmd "command(s) run after Apply now"
+        TEXT php_binary "optional PHP CLI for this project's hooks/terminal"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }

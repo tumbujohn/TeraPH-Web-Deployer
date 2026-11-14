@@ -38,7 +38,7 @@ functions. There is no multi-user role model — see §5.
 
 | ID | Requirement |
 | --- | --- |
-| REQ-F-010 | A project is registered with: name (unique slug), source type (`github` or `manual`), repo URL + branch (GitHub) or uploaded archive (manual), target path, safe-keep paths, GitHub PAT, deploy template, pre/post-deploy hooks, terminal enabled flag, env mode. |
+| REQ-F-010 | A project is registered with: name (unique slug), source type (`github` or `manual`), repo URL + branch (GitHub) or uploaded archive (manual), target path, safe-keep paths, GitHub PAT, deploy template, pre/post-deploy hooks, terminal enabled flag, env mode, optional PHP binary. |
 | REQ-F-011 | The dashboard lists all projects with last deployment status and timestamp. |
 | REQ-F-012 | Projects can be edited; leaving the PAT field blank on edit preserves the stored token (`keep_pat` flag). |
 | REQ-F-013 | Deleting a project removes its row and all associated `project_env_vars`, but **retains** its `deployments` and `deployment_logs` rows for audit continuity. |
@@ -116,7 +116,8 @@ functions. There is no multi-user role model — see §5.
 | REQ-F-091 | Terminal commands stream stdout/stderr to the browser in real time via `proc_open`. |
 | REQ-F-092 | A shortcut toolbar provides one-click common commands and a "download composer.phar" action with SHA-256 verification. |
 | REQ-F-093 | Commands are subject to `TERMINAL_TIMEOUT` (default 600s). |
-| REQ-F-094 | Hooks and the terminal run the PHP CLI named by `CLI_PHP_PATH` when it is set (its directory is placed first on `PATH`, and `{composer}` uses it); when unset or not an executable file they use whatever `php` the web server's `PATH` finds, exactly as before. The Settings page shows the PHP version hooks actually get, flags a major.minor difference from the PHP serving the page, and suggests the site's own CLI binary. |
+| REQ-F-094 | Hooks, the Apply-now command and the terminal run with a PHP CLI chosen in this order: the project's own binary (`projects.php_binary`), then `CLI_PHP_PATH` (a path, or `system` to leave `PATH` alone), then automatic — the CLI belonging to the PHP serving the site, used when the `php` on the web server's `PATH` is a different major.minor version. The chosen binary's directory is placed first on `PATH` (a binary not named `php` is exposed as `php` through a shim under `storage/tmp/phpbin/`) and `{composer}` uses it. An unusable setting is ignored and flagged, never fatal. |
+| REQ-F-095 | The project form accepts an optional PHP binary, validated on save as an absolute path to an executable file with no control characters, and suggests binaries found in the usual host locations. Settings shows the PHP hooks get and how it was chosen, flags a major.minor difference from the web PHP (with the reason), flags an unusable `CLI_PHP_PATH`, and lists the PHP binaries found with their versions. Deploy and apply logs state the PHP used. |
 
 ### 2.10 .env Manager
 

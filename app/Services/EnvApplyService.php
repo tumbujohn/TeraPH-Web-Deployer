@@ -60,6 +60,7 @@ class EnvApplyService
                     DeploymentLog::info($deploymentId, 'No apply command configured — skipped.');
                 } else {
                     DeploymentLog::info($deploymentId, 'Running apply command(s) (' . count($commands) . ')...');
+                    DeploymentLog::info($deploymentId, 'Commands run PHP ' . HookRunner::describePhp($project['php_binary'] ?? null) . '.');
                     $exit = $this->hooks->runAll(
                         $commands,
                         $project['target_path'],
@@ -68,7 +69,8 @@ class EnvApplyService
                             if ($line !== '') {
                                 DeploymentLog::info($deploymentId, $line);
                             }
-                        }
+                        },
+                        $project['php_binary'] ?? null
                     );
                     if ($exit !== 0) {
                         throw new RuntimeException("Apply command failed with exit code {$exit}. The .env was written.");

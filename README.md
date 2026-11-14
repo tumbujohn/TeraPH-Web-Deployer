@@ -271,7 +271,7 @@ define('LOCK_TIMEOUT',            1200); // Seconds before a stuck deploy lock i
 define('HOOK_TIMEOUT',            300);  // Max seconds a single pre/post deploy hook may run
 define('BACKUP_ENCRYPT_ENV',      false); // true = AES-256 password-protect .env files inside backup zips
 define('ENV_FILE_MODE',           0640);  // permissions of the managed .env (installs without this line keep 0644)
-define('CLI_PHP_PATH',            '');    // PHP CLI binary for hooks + terminal; '' = whatever `php` the web server's PATH finds
+define('CLI_PHP_PATH',            '');    // PHP CLI for hooks + terminal: '' = automatic (the PHP that runs this site), a path, or 'system'
 ```
 
 ---
@@ -495,10 +495,10 @@ Use `{composer}` instead of a hardcoded path in hook commands. At runtime it res
 - `composer` — if the global binary is available (`which composer` / `where composer`)
 - `php composer.phar` — fallback (download it via the web terminal toolbar)
 
-`php` here means the PHP CLI that hooks and the terminal run — `CLI_PHP_PATH` if set, otherwise
-whatever `php` the **web server's `PATH`** finds. That is not necessarily the PHP your site runs on or the
-one you get over SSH; see [Composer says my PHP is too old](#composer-says-my-php-is-too-old-but-settings-and-ssh-show-a-newer-one).
-
+`php` here is the PHP CLI that hooks and the terminal run, chosen **automatically**: the CLI that belongs to
+the PHP serving the site, whenever the `php` on the web server's `PATH` is a different version (see
+[Composer says my PHP is too old](#composer-says-my-php-is-too-old-but-settings-and-ssh-show-a-newer-one)).
+Override it globally with `CLI_PHP_PATH` or per project in the project's settings.
 ```bash
 {composer} install --no-dev --optimize-autoloader
 {composer} dump-autoload
@@ -849,30 +849,33 @@ If a hook command fails with `command not found`, check:
 Symptom: `composer install` fails with *"Root composer.json requires php ^8.3 but your php version (8.2.x)
 does not satisfy that requirement"*, yet the Settings page and `php -v` over SSH show a newer PHP.
 
-Cause: hooks and the terminal run commands from the web server's process, so `php` resolves through the
-**web server's `PATH`** — often the host's default CLI PHP (on cPanel, the global default rather than the
-domain's MultiPHP version). Your SSH login has its own `PATH`, and the Settings page shows the PHP serving
-the page, so the three can differ.
+**Why there are two PHP versions.** A multi-PHP host (cPanel, DirectAdmin, Plesk, CloudLinux) installs several
+PHP versions side by side, each with its own web handler *and its own command-line binary*. The Settings page
+shows the PHP serving the page. Hooks and the terminal, however, run `php` as a shell command, and the shell
+looks it up on the **web server process's `PATH`** — usually the host's *default* CLI, which can be a different
+version. Your SSH login has yet another `PATH`. So three lookups can give three different versions.
 
-1. Open **Settings → PHP Environment**. **PHP for hooks & terminal** shows what hooks actually run, and
-   when it differs it suggests the fix.
-2. Set the PHP CLI binary in `config.php`. Find the right path over SSH with `which -a php`, or look in
-   your host's PHP selector:
-   ```php
-   define('CLI_PHP_PATH', '/opt/cpanel/ea-php84/root/usr/bin/php');   // cPanel
-   // '/opt/alt/php84/usr/bin/php'   CloudLinux   |   '/usr/local/php84/bin/php'   DirectAdmin
-   ```
-   The file must be named `php` and live in a directory with that PHP's other tools. This puts its folder
-   first on `PATH` for every hook and terminal command, so `php artisan …`, `composer` and `{composer}` all
-   use it.
-3. Redeploy. No code change is needed for hooks written as `php …` or `{composer} …`.
+**What the deployer does about it.** By default it compares the `php` on that `PATH` with the PHP serving the
+site, and when the versions differ it runs hooks and the terminal with the site's own PHP CLI (its folder goes
+first on `PATH`, so `php`, `composer`, `php artisan` and `{composer}` all use it). **Settings → PHP Environment**
+shows which PHP hooks get and why, lists the PHP binaries found on the host, and every deploy log says
+`Hooks run PHP <version> (<path>, <how it was chosen>)`.
 
-Without a config change you can also call the binary explicitly in a hook, for example
-`/opt/cpanel/ea-php84/root/usr/bin/php composer.phar install --no-dev`.
+Choosing a different PHP:
 
-Also check the *lock file*: it can require a newer PHP than `composer.json` does (for example Symfony 8
-packages need PHP 8.4.1+). `composer install` fails until the PHP you point at satisfies the lock.
+- **For one project:** edit the project and fill in *PHP for hooks & terminal* with the absolute path of a PHP
+  CLI (the field suggests the binaries found on the host). It wins over everything else.
+- **For all projects:** set `CLI_PHP_PATH` in `config.php` to a path such as
+  `/opt/cpanel/ea-php84/root/usr/bin/php`, `/opt/alt/php84/usr/bin/php` or `/usr/local/php84/bin/php`.
+  Find it over SSH with `which -a php`, or in your host's PHP selector.
+- **To keep the old behavior** (whatever `php` the web server's `PATH` finds): `define('CLI_PHP_PATH', 'system');`
 
+A chosen binary doesn't have to be named `php` (`php8.3` and `ea-php83` work; the deployer exposes it as `php`
+through a small shim under `storage/tmp/phpbin/`).
+
+Note the PHP the application *needs* may differ from the one the site runs on, and a lock file can require a
+newer PHP than `composer.json` does (for example Symfony 8 packages need PHP 8.4.1+). `composer install` fails
+until the PHP the project uses satisfies the lock, so pick that PHP for the project.
 ### Terminal command times out
 
 Increase `TERMINAL_TIMEOUT` in `config.php`:

@@ -346,6 +346,21 @@ $csrf     = csrf_token();
                     <small class="form-hint">When enabled, configure keys and values via the <a href="env_manager.php" style="color:#3ecf8e;">Env Manager</a>.</small>
                 </div>
 
+                <div class="form-group">
+                    <label for="p-php-binary">PHP for hooks &amp; terminal <span class="form-hint-inline">(optional)</span></label>
+                    <input type="text" id="p-php-binary" name="php_binary" class="form-control" list="php-binaries-list"
+                           autocomplete="off" spellcheck="false"
+                           placeholder="Automatic — the PHP that runs this site">
+                    <datalist id="php-binaries-list">
+                        <?php foreach (HookRunner::discoverPhpBinaries() as $phpBin): ?>
+                            <option value="<?= h($phpBin) ?>"></option>
+                        <?php endforeach; ?>
+                    </datalist>
+                    <small class="form-hint">Composer and <code>php artisan</code> in this project's hooks and terminal run with this PHP.
+                        Leave empty for the automatic choice; pick one of the detected binaries or type the absolute path of a PHP CLI.
+                        Settings lists what was found.</small>
+                </div>
+
                 <div class="alert alert-danger" id="project-form-error" hidden></div>
             </form>
         </div>

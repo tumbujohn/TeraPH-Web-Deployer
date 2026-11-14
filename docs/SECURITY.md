@@ -107,6 +107,12 @@ error instead of silently storing plaintext.
   the constant keeps `0644`, because tightening it automatically could cut off a web server that
   runs as a different user than the deployer (for example deploys started over SSH). Add
   `define('ENV_FILE_MODE', 0640);` to opt in once you've confirmed the app can still read `.env`.
+- **PHP binary settings** (`CLI_PHP_PATH`, a project's *PHP for hooks & terminal*) choose which executable
+  runs hook and terminal commands. The project field is editable from the authenticated, CSRF-protected
+  project form and is validated on save and again at use: an absolute path to an existing executable file,
+  no control characters (so nothing can be smuggled into a command line or `PATH`). It grants nothing
+  beyond what hooks and the terminal already allow. A binary not named `php` is exposed through a
+  symlink or one-line wrapper under `storage/tmp/phpbin/`, which is not web-accessible.
 - **Apply now runs a stored command** (`projects.env_apply_cmd`) through `HookRunner`, with the
   same privileges and timeout as deploy hooks. It is set from the authenticated, CSRF-protected
   .env Manager page only. Treat it as equivalent to a deploy hook.

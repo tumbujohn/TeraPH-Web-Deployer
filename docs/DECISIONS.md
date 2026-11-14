@@ -248,6 +248,8 @@ change the deployed code, still counts.
 
 ## Hooks Use an Explicit PHP CLI Setting, Not Auto-Detection
 
+**Status: superseded** by "Hooks Run the Site's Own PHP by Default" below — kept for the reasoning it records.
+
 **Context:** Hooks and the terminal run through `proc_open` with the web server's environment, so a bare
 `php` is whatever the web server's `PATH` finds — on cPanel typically the host's default CLI PHP, not the
 domain's MultiPHP version. Composer then fails platform checks even though the Settings page (the web PHP)
@@ -265,6 +267,31 @@ change and UI, and one global value covers the common case.
 
 **Consequences:** One global value for all projects; a project needing a different PHP can still call a
 binary explicitly in its hooks. An invalid path is ignored (flagged on Settings), not fatal.
+
+---
+
+## Hooks Run the Site's Own PHP by Default
+
+**Context:** The previous decision made `CLI_PHP_PATH` opt-in. In practice the failure it prevents is
+confusing and hits exactly the people who don't know to look: Composer reports a PHP version that matches
+neither the Settings page nor SSH, because the web server's `PATH` finds a different CLI than the one the
+site runs on. A manual config-file step to fix a mismatch the deployer can already detect was the wrong
+default, and the choice should also be available per project.
+
+**Decision:** Selection is now automatic and layered (`HookRunner::resolvePhp()`): the project's own binary,
+then `CLI_PHP_PATH` (a path, or `system` to opt out), then automatic — the CLI of the PHP serving the site
+(`HookRunner::webPhpCli()`), applied only when the `php` on `PATH` is a different major.minor version, so
+installs where the two already agree are untouched. A binary not named `php` is exposed as `php` through a
+shim directory. Settings shows what was chosen and why; deploy logs record it.
+
+**Alternatives considered:** Keeping it opt-in with a warning — rejected after the failure above. Always
+overriding `PATH` even when the versions agree — rejected, needless change. A per-project setting only —
+rejected, a global default plus an override covers hosts with one PHP and hosts with many.
+
+**Consequences:** This changes behavior for existing installs whose `PATH` php differs from the site's:
+their hooks now run with the site's PHP. That is the intended fix, but a project that relied on the other
+PHP must set its own binary or `CLI_PHP_PATH = 'system'`. The target application's PHP need not equal the
+deployer's own — that is what the per-project binary is for.
 
 ---
 

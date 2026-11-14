@@ -613,6 +613,7 @@
         document.getElementById('p-post-hooks').value          = p.post_deploy_hooks || '';
         document.getElementById('p-terminal-enabled').checked  = p.terminal_enabled != 0;
         document.getElementById('p-env-mode').value            = p.env_mode || 'none';
+        document.getElementById('p-php-binary').value          = p.php_binary || '';
 
         // Trigger toggle logic
         document.getElementById('p-source-type').dispatchEvent(new Event('change'));

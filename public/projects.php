@@ -49,6 +49,7 @@ if ($action === 'create') {
     }
 
     $id = Project::create($data);
+    Project::setPhpBinary($id, $data['php_binary']);
     
     // Handle manual archive upload if provided
     $uploadError = handleManualArchiveUpload($id);
@@ -87,6 +88,7 @@ if ($action === 'update') {
     }
 
     Project::update($id, $data);
+    Project::setPhpBinary($id, $data['php_binary']);
 
     // Handle manual archive upload if provided (overwrites existing if any)
     $uploadError = handleManualArchiveUpload($id);
@@ -142,6 +144,7 @@ function sanitizeProjectInput(array $post): array
         'post_deploy_hooks' => trim($post['post_deploy_hooks'] ?? '') ?: null,
         'terminal_enabled'  => isset($post['terminal_enabled']) ? (int)(bool)$post['terminal_enabled'] : 1,
         'env_mode'          => trim($post['env_mode'] ?? '') === 'managed' ? 'managed' : 'none',
+        'php_binary'        => trim($post['php_binary'] ?? '') ?: null,   // saved by Project::setPhpBinary()
     ];
 }
 
@@ -165,6 +168,11 @@ function validateProjectInput(array $data): array
 
     if (empty($data['target_path'])) {
         $errors[] = 'Target path is required.';
+    }
+
+    if (!empty($data['php_binary']) && !HookRunner::usableBinary($data['php_binary'])) {
+        $errors[] = 'PHP binary must be the absolute path of an executable PHP CLI on this server'
+                  . ' (nothing was found at: ' . $data['php_binary'] . '). Leave it empty for the automatic choice.';
     }
 
     return $errors;

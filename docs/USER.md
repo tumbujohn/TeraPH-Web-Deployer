@@ -30,6 +30,7 @@ Click **+ Add Project** and fill in:
 | **Deploy Template** | Pre-fills hook commands for a framework (`laravel`, `codeigniter`, `wordpress`, `symfony`, or `none`). |
 | **Pre/Post-Deploy Hooks** | Shell commands run automatically as part of every deploy — see §5. |
 | **Enable Terminal** | Whether the web terminal is available for this project. |
+| **PHP for hooks & terminal** | Optional. Absolute path of the PHP CLI that Composer and `php artisan` use for this project. Leave empty for the automatic choice (the PHP that runs the site); the field suggests the PHP binaries found on the server. |
 
 For **Manual Zip Upload** projects, upload a `.zip` of the application after saving — it's
 stored and reused for every deploy until you upload a new one.
@@ -212,7 +213,7 @@ Two one-click maintenance actions are available there:
 | Deployment stuck at "⟳ Deploying" | Ask your administrator to run `php tera deploy:reconcile`, or use the equivalent action on the Settings page, then reload. |
 | No result after clicking Deploy | The dashboard always re-checks real status from the server — reload if unsure. Check the Logs modal for the pipeline's last recorded step. |
 | 404 downloading from a private GitHub repo | Usually an expired or misscoped PAT. Re-check the PAT setup in §3. |
-| Composer says my PHP version is too old, but Settings and SSH show a newer one | Hooks and the terminal use the `php` on the *web server's* PATH, which can differ. Check **Settings → PHP for hooks & terminal**; your administrator can set `CLI_PHP_PATH` in `config.php` (the page suggests a value). See the README troubleshooting entry. |
+| Composer says my PHP version is too old, but Settings and SSH show a newer one | Hooks use the CLI PHP, which can differ from the PHP serving the site. The deployer now picks the site's own PHP automatically. **Settings → PHP for hooks & terminal** shows what hooks use and lists the PHP binaries on the server. To use a different one, set *PHP for hooks & terminal* in the project's settings (or your administrator sets `CLI_PHP_PATH`). Also check that the lock file doesn't need a newer PHP than the one chosen. See the README troubleshooting entry. |
 | A pre/post-deploy hook says "command not found" | Use `{composer}` instead of `composer` directly, or use the terminal's **↓ composer.phar** button. |
 | Terminal command times out | Ask your administrator to raise the terminal/hook timeout in server config. |
 | Target directory doesn't exist | Create it on the server first, or double-check the Target Directory field for typos. |

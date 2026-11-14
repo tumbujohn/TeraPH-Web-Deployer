@@ -62,7 +62,7 @@ if (!is_dir($cwd)) {
 
 // PRAC.3 — resolve {composer} placeholder so admins can type it naturally
 $hookRunner = new HookRunner();
-$command    = str_replace('{composer}', $hookRunner->resolveComposer($cwd), $command);
+$command    = str_replace('{composer}', $hookRunner->resolveComposer($cwd, $project['php_binary'] ?? null), $command);
 
 // PRAC.3 — write audit record (DB preferred, flat-file fallback)
 $auditUser = $_SESSION['username'] ?? 'unknown';
@@ -120,7 +120,7 @@ $descriptorspec = [
     2 => ['pipe', 'w'],
 ];
 
-$process = proc_open($shellCmd, $descriptorspec, $pipes, $cwd, HookRunner::buildEnv());
+$process = proc_open($shellCmd, $descriptorspec, $pipes, $cwd, HookRunner::buildEnv($project['php_binary'] ?? null));
 
 if (!is_resource($process)) {
     echo "\n[ERROR] Failed to start process.\n";

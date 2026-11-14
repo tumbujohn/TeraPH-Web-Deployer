@@ -180,6 +180,17 @@ class Project
     }
 
     /**
+     * Sets (or clears, with null/'') the project's own PHP CLI binary — see HookRunner::resolvePhp().
+     */
+    public static function setPhpBinary(int $id, ?string $binary): void
+    {
+        $binary = trim((string) $binary);
+        $pdo    = Database::connect();
+        $pdo->prepare("UPDATE projects SET php_binary = ?, updated_at = ? WHERE id = ?")
+            ->execute([$binary === '' ? null : $binary, date('Y-m-d H:i:s'), $id]);
+    }
+
+    /**
      * Deletes a project by ID and all associated env vars.
      * Deployments and logs are retained for audit purposes.
      */

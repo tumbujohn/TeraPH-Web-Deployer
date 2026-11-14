@@ -15,14 +15,25 @@ $deployerRoot    = defined('DEPLOYER_ROOT') ? DEPLOYER_ROOT : dirname(__DIR__);
 // ---- PHP environment -------------------------------------------------------
 $phpVersionOk = version_compare(PHP_VERSION, '8.1.0', '>=');
 
-// PHP used by deploy hooks and the terminal vs the PHP serving this page. They can differ: commands inherit
-// the web server's PATH, whose `php` is often the host's default CLI rather than this site's version.
-$cliPhpConfigured = defined('CLI_PHP_PATH') ? trim((string) CLI_PHP_PATH) : '';
-$cliPhpBinary     = HookRunner::cliPhp();                              // null = use `php` from PATH
-$cliPhpVersion    = HookRunner::phpVersionOf($cliPhpBinary ?? 'php');  // what a hook's `php` really is
-$mmOf             = fn(?string $v): ?string => ($v !== null && preg_match('/^(\d+\.\d+)/', $v, $m)) ? $m[1] : null;
-$cliPhpMismatch   = $cliPhpVersion !== null && $mmOf($cliPhpVersion) !== PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
-$cliPhpSuggestion = ($cliPhpMismatch && $cliPhpBinary === null) ? HookRunner::webPhpCli() : null;   // this site's own CLI
+// PHP used by deploy hooks and the terminal vs the PHP serving this page (HookRunner::resolvePhp()). Commands
+// are child processes of the web server, so a bare `php` follows the web server's PATH — often a different
+// version than the site runs on; by default the deployer now picks the site's own PHP CLI automatically.
+$phpSel      = HookRunner::resolvePhp();
+$phpWebCli   = HookRunner::webPhpCli();
+$phpForHooks = HookRunner::phpVersionOf($phpSel['binary'] ?? 'php');
+$phpWebMm    = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+$phpMismatch = $phpForHooks !== null && !str_starts_with($phpForHooks, $phpWebMm . '.');
+$phpFound    = [];                                                   // binaries on this host => version (one `php -r` each)
+foreach (HookRunner::discoverPhpBinaries() as $phpBin) {
+    $phpFound[$phpBin] = HookRunner::phpVersionOf($phpBin);
+}
+$phpConfigured = defined('CLI_PHP_PATH') ? trim((string) CLI_PHP_PATH) : '';
+$phpSourceHtml = match ($phpSel['source']) {
+    'project' => 'project setting',
+    'config'  => h((string) $phpSel['binary']) . ' (CLI_PHP_PATH)',
+    'auto'    => h((string) $phpSel['binary']) . ' — chosen automatically: the PHP that runs this site',
+    default   => '<code>php</code> from the web server\'s PATH',
+};
 $dbExt        = DB_DRIVER === 'mysql' ? 'pdo_mysql' : 'pdo_sqlite';
 $extChecks    = ['zip', 'curl', 'pdo', $dbExt];
 
@@ -165,34 +176,55 @@ $csrfToken = csrf_token();
                     </dd>
                     <dt>PHP for hooks &amp; terminal</dt>
                     <dd>
-                        <?php if ($cliPhpVersion !== null): ?>
-                            <?= h($cliPhpVersion) ?>
-                            <span class="badge <?= $cliPhpMismatch ? 'badge-danger' : 'badge-success' ?>" style="margin-left:6px;">
-                                <?= $cliPhpMismatch ? 'differs' : 'matches' ?>
+                        <?php if ($phpForHooks !== null): ?>
+                            <?= h($phpForHooks) ?>
+                            <span class="badge <?= $phpMismatch ? 'badge-danger' : 'badge-success' ?>" style="margin-left:6px;">
+                                <?= $phpMismatch ? 'differs' : 'matches' ?>
                             </span>
-                            <br><span style="font-size:11px; opacity:.7;">
-                                <?= $cliPhpBinary !== null ? h($cliPhpBinary) . ' (CLI_PHP_PATH)' : '<code>php</code> from the web server\'s PATH' ?>
-                            </span>
+                            <br><span style="font-size:11px; opacity:.7;"><?= $phpSourceHtml ?></span>
                         <?php else: ?>
                             <span style="opacity:.7;">unknown (could not run <code>php</code> — is <code>proc_open</code> disabled?)</span>
                         <?php endif; ?>
                     </dd>
                 </dl>
-                <?php if ($cliPhpConfigured !== '' && $cliPhpBinary === null): ?>
+                <?php if (in_array('config', $phpSel['ignored'], true)): ?>
                     <div style="background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.3); border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:12px; color:#f87171; line-height:1.6;">
-                        <strong>CLI_PHP_PATH is set but not usable:</strong> <code><?= h($cliPhpConfigured) ?></code> is not an
-                        executable file, so hooks and the terminal are falling back to <code>php</code> from PATH.
-                    </div>
-                <?php elseif ($cliPhpMismatch): ?>
-                    <div style="background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.3); border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:12px; color:#fbbf24; line-height:1.6;">
-                        <strong>Hooks and the terminal run PHP <?= h($cliPhpVersion) ?>, but this site runs PHP <?= h(PHP_VERSION) ?>.</strong>
-                        Composer and <code>php artisan</code> in your hooks use the first. If your project needs PHP
-                        <?= h(PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION) ?>, set <code>CLI_PHP_PATH</code> in <code>config.php</code>
-                        to that PHP's CLI binary<?php if ($cliPhpSuggestion !== null): ?>, for example:
-                        <br><code>define('CLI_PHP_PATH', '<?= h($cliPhpSuggestion) ?>');</code><?php else: ?>
-                        (find it over SSH with <code>which -a php</code> or in your host's PHP selector).<?php endif; ?>
+                        <strong>CLI_PHP_PATH is set but not usable:</strong> <code><?= h($phpConfigured) ?></code> is not the absolute
+                        path of an executable file, so it is being ignored.
                     </div>
                 <?php endif; ?>
+                <?php if ($phpMismatch): ?>
+                    <div style="background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.3); border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:12px; color:#fbbf24; line-height:1.6;">
+                        <strong>Hooks and the terminal run PHP <?= h($phpForHooks) ?>, but this site runs PHP <?= h(PHP_VERSION) ?>.</strong>
+                        <?php if ($phpSel['source'] === 'system' && $phpWebCli !== null): ?>
+                            <code>CLI_PHP_PATH</code> is set to <code>system</code>, which keeps the web server's <code>php</code>. Clear it to
+                            use this site's PHP automatically, or set a path.
+                        <?php elseif ($phpSel['source'] === 'system'): ?>
+                            The deployer could not find this site's own PHP CLI automatically. Set <code>CLI_PHP_PATH</code> in
+                            <code>config.php</code> to the CLI binary (see the list below, or <code>which -a php</code> over SSH), or choose a
+                            PHP binary in the project's settings.
+                        <?php else: ?>
+                            That is the PHP you chose (<?= $phpSel['source'] === 'project' ? 'project setting' : 'CLI_PHP_PATH' ?>); fine if your
+                            applications need it.
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+                <?php if (!empty($phpFound)): ?>
+                    <p class="settings-section-title" style="margin-top:4px;">PHP binaries found on this host</p>
+                    <div class="ext-list" style="margin-bottom:16px;">
+                        <?php foreach ($phpFound as $phpPath => $phpVer): ?>
+                            <div class="ext-row">
+                                <span class="ext-name" style="word-break:break-all;"><?= h($phpPath) ?></span>
+                                <span>
+                                    <?= $phpVer !== null ? h($phpVer) : '?' ?>
+                                    <?php if ($phpPath === $phpSel['binary']): ?><span class="badge badge-success" style="margin-left:6px;">in use</span><?php endif; ?>
+                                </span>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <p style="font-size:11px; opacity:.7; margin:-8px 0 16px;">Pick one per project in the project's settings, or set <code>CLI_PHP_PATH</code> for all projects.</p>
+                <?php endif; ?>
+                <p class="settings-section-title" style="margin-top:4px;">Required extensions</p>
                 <div class="ext-list">
                     <?php foreach ($extChecks as $ext): ?>
                         <?php $loaded = extension_loaded($ext); ?>
