@@ -174,6 +174,71 @@ no read-only mode. See [REQUIREMENTS.md](REQUIREMENTS.md) §5 and [TODO.md](TODO
 
 ---
 
+## Values Containing `${` Are Written Single-Quoted
+
+**Context:** The managed `.env` is read by whatever the deployed app uses — typically
+vlucas/phpdotenv (Laravel and others) or CodeIgniter 4's `DotEnv`. Both expand `${NAME}`
+references to already-defined variables, so a stored password like `pa${HOME}ss` can be
+silently rewritten when the app reads it. A bare `$` (as in `cost$5`) is not expanded by
+either parser; only the exact `${NAME}` form is. Parser behavior was checked against the
+phpdotenv 5.x and CI4 `DotEnv` source.
+
+**Decision:** `env_quote_value()` writes a value in single quotes when it contains `${` and
+no `'`, backslash or newline. phpdotenv reads single-quoted values literally, so these are
+protected. All other values keep the previous rules (bare, or double-quoted with `"` and `\`
+escaped), which both parsers read identically.
+
+**Alternatives considered:** Single-quoting every value with `$` — rejected, it adds no
+protection (a lone `$` is never expanded) and changes output for no reason. Escaping as
+`\$` in double quotes — rejected: phpdotenv accepts it but CI4's regex fails to match a
+lone backslash and leaves the surrounding quotes in the value, which is worse than the
+expansion it prevents.
+
+**Consequences:** Two known gaps remain. (1) CI4 expands `${NAME}` inside any quoting and
+has no escape, so a value referencing a variable that is defined there cannot be written
+safely for CI4. (2) A `${` value that also contains `'`, a backslash or a newline can't be
+single-quoted and phpdotenv may still expand it. Both are rare; avoid `${` in secrets for
+CI4 projects.
+
+---
+
+## The Stored Env Template Holds Structure, Not Values
+
+**Context:** Pasting a full `.env` into the template field saved the raw text — secrets included —
+in `projects.env_template` (plaintext), while the values were also stored encrypted. The textarea
+then displayed the old values, and re-saving it overwrote newer stored values with stale ones.
+"Pull from live" would have copied a whole production `.env` into that column.
+
+**Decision:** `EnvVar::setTemplate()` always scrubs values (`KEY=secret` → `KEY=`). The template is
+only the key order, comments and `export` prefixes; values come from `project_env_vars`.
+
+**Alternatives considered:** Encrypting the whole template — rejected, the structure isn't secret
+and the editor needs it readable. Scrubbing only in the UI — rejected, every write path
+(import, pull, copy, bundle) must be safe.
+
+**Consequences:** Defaults in a pasted `.env.example` are still imported as values, but no longer
+visible in the template textarea. Existing templates keep their plaintext until scrubbed (banner +
+one click) — they are not rewritten silently.
+
+---
+
+## "Apply Now" Is a Recorded, Locked Action
+
+**Context:** Changing one env value shouldn't need a full redeploy, but writing files into a live
+site is exactly what the deploy lock and audit trail exist for.
+
+**Decision:** Apply now goes through `EnvApplyService`, which records a `deployments` row
+(`mode = 'env_apply'`), takes the same per-project lock, logs each step, and shares its preflight
+and write code with the deploy pipeline.
+
+**Alternatives considered:** A bare "write file" button — rejected, no audit trail and it could race
+a running deploy. Reusing the full deploy with a flag — rejected, it re-downloads and re-copies.
+
+**Consequences:** An apply appears in the deployment history and, like a restore, can become the
+"latest deployment" shown on the dashboard.
+
+---
+
 *Record new significant decisions here as they're made — architecture, technology,
 product, security, or UX. Include context, the decision, alternatives considered, and
 consequences.*

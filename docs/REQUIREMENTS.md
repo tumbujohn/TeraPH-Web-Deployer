@@ -77,6 +77,7 @@ functions. There is no multi-user role model — see §5.
 | REQ-F-051 | Backups are listed per project (name, size, created time) via `backups.php`. |
 | REQ-F-052 | Restoring a backup: takes a safety snapshot of current state first, clears the target, extracts the selected backup, sets permissions. |
 | REQ-F-053 | `MAX_BACKUPS_PER_PROJECT` (default 10) is enforced — oldest backups beyond the limit are deleted after each new backup. |
+| REQ-F-055 | `BACKUP_ENCRYPT_ENV` (default `false`) controls whether `.env` files inside backup zips are AES-256 password-protected (key derived from `SECRET_KEY`). Restore decrypts transparently, and decrypts backups made while the flag was on even after it is turned off. |
 | REQ-F-054 *(not implemented)* | Backup download from the browser. See TODO.md. |
 
 ### 2.6 Logging & Audit Trail
@@ -123,8 +124,22 @@ functions. There is no multi-user role model — see §5.
 | REQ-F-100 | Per project, `env_mode` toggles between `none` (deployer does not touch `.env`) and `managed` (deployer owns and writes `.env` on every deploy). |
 | REQ-F-101 | A template (raw `.env.example`/`.env` text) can be pasted or imported from the target's existing `.env.example`; saving extracts and syncs keys. |
 | REQ-F-102 | Individual values are stored encrypted; the UI never displays raw values by default (per-field and "hide all" toggle) and the rendered preview always masks non-empty values. |
-| REQ-F-103 | A key can be flagged `required`; a deploy halts before touching the target if any required key is empty. |
+| REQ-F-103 | A key can be flagged `required`; a deploy halts in a preflight step — before the download, backup, or any change to the target — if any required key is empty. Re-saving a template or re-importing `.env.example` preserves existing required flags. |
 | REQ-F-104 | Keys can be added, renamed (value/order preserved), or deleted individually. |
+| REQ-F-105 | The same preflight halts the deploy if any stored value cannot be decrypted (changed `SECRET_KEY`, corrupt data) rather than writing it as empty; the UI flags those keys and shows a banner. |
+| REQ-F-106 | After extraction, the release's `.env.example` is compared with the managed keys; keys it lists that are unmanaged or empty are logged as warnings (advisory — they do not fail the deploy), and managed keys it no longer lists are logged as info. |
+| REQ-F-108 | Saving a template or importing `.env.example` never deletes keys silently: if the new text drops existing keys, nothing is written and the UI asks to remove them or keep them (kept keys are re-added to the template as empty stubs). Keys holding stored values are called out. |
+| REQ-F-109 | Template saves, key add, rename and delete each run in a single database transaction, so keys and template cannot end up half-updated. Deleting a key also removes its line from the template; renaming rewrites it. |
+| REQ-F-107 | The written `.env` is mode `0640` and is excluded from the 0644 permission sweep. Value fields in the UI are masked (`type=password`) until revealed. |
+| REQ-F-120 | The .env Manager shows a **Live .env** drift check: the target's `.env` compared with what the manager would write, as `In sync` / `Drift` / `No file` / `Unreadable`. Differences are listed by key name only (different value / managed but missing / in the file but unmanaged) — never values. |
+| REQ-F-121 | **Apply now** writes the managed `.env` (mode `0640`) without a deploy, optionally followed by a stored per-project command (`projects.env_apply_cmd`, one per line, `HOOK_TIMEOUT` applies). It runs the same preflight as a deploy, is recorded as a deployment row with `mode = 'env_apply'` (audit trail + logs), and is refused if managed mode is off, the target directory is missing, or a deployment is running. A failing command marks the record failed and says the `.env` was already written. |
+| REQ-F-122 | **Pull from live** imports the target's current `.env` (≤ 1 MB) with its values. It never deletes: unknown keys are added, empty stored values filled, the live file's structure becomes the template if the project has none, and every stored key stays listed in the template. If the live file holds a different value for a key that already has one, nothing is imported until the user chooses *replace* or *keep mine*. |
+| REQ-F-123 | The stored template never contains values: it is scrubbed (`KEY=secret` → `KEY=`) on every save, so secrets exist only encrypted in `project_env_vars`. A banner offers a one-click scrub of templates saved by earlier versions, saving any not-yet-stored value (encrypted) first. |
+| REQ-F-124 | **Bulk edit** shows every value as `KEY=value` text and applies it: listed keys are updated (empty clears), new keys added, unlisted keys untouched. |
+| REQ-F-125 | The Values table can be **filtered** by key name and **reordered** (drag with a mouse; ▲/▼ buttons everywhere). Saving persists the order and reorders the template to match — each key moves with the comment lines directly above it. |
+| REQ-F-126 | **Copy from another project** merges that project's keys, values, required flags and structure; existing non-empty values are kept unless *overwrite* is ticked. Nothing is deleted. |
+| REQ-F-127 | **Encrypted export/import**: a passphrase-protected JSON bundle (PBKDF2-SHA256 200 000 iterations → AES-256-GCM; passphrase ≥ 10 characters on export, file ≤ 1 MB on import) carrying keys, values, required flags and the scrubbed template. Import merges like Copy. The passphrase, not `SECRET_KEY`, is the key. |
+| REQ-F-128 | Values containing line breaks (e.g. PEM keys) are supported end to end: multi-line quoted values parse as one entry, are shown in the masked field with `\n` escapes (a single-line input would strip real line breaks), and are decoded only for rows the page flagged as escaped. |
 
 ### 2.11 Dashboard & Settings UI
 

@@ -82,6 +82,32 @@ clear. This is a known, tracked gap — see [TODO.md](TODO.md) P0 and
 - Ensuring `storage/` is inaccessible from the web (§3) and that server-level file
   permissions restrict who can read `storage/deployer.db` directly.
 
+### `.env` in backups
+
+Backups are plain zips of the target directory, so a managed `.env` is stored there
+**unencrypted** by default — anyone who can read `storage/backups/` can read your secrets.
+Set `BACKUP_ENCRYPT_ENV` to `true` in `config.php` to AES-256 password-protect `.env` files
+(`.env`, `.env.local`, … but not `.env.example`) inside each backup. The password is derived
+from the same key as stored env values, so changing `SECRET_KEY` makes those `.env` entries
+unrecoverable. Only `.env` files are protected; the rest of the archive is unencrypted.
+Requires PHP 7.2+ with libzip 1.2+; if unavailable the backup fails with an explanatory
+error instead of silently storing plaintext.
+
+### .env Manager: template, apply command, bundles
+
+- **The stored template holds no values.** `projects.env_template` is scrubbed on every save, so
+  secrets exist only encrypted. Templates saved by older versions may still contain plaintext
+  values; the .env Manager shows a banner with a one-click scrub. Until scrubbed, those values
+  sit unencrypted in the database.
+- **Apply now runs a stored command** (`projects.env_apply_cmd`) through `HookRunner`, with the
+  same privileges and timeout as deploy hooks. It is set from the authenticated, CSRF-protected
+  .env Manager page only. Treat it as equivalent to a deploy hook.
+- **Export bundles are protected only by their passphrase** (PBKDF2-SHA256, 200 000 iterations,
+  AES-256-GCM, ≥ 10 characters enforced on export). A weak passphrase is brute-forceable
+  offline; the importer bounds the iteration count so a crafted file can't choose the CPU cost.
+- **Drift and pull never display live values.** Drift lists key names only; a pull that would
+  replace stored values asks first and shows only the key names.
+
 ### `.env` encryption key fallback
 
 `env_encryption_key()` uses `SECRET_KEY` if set in `config.php`; if not, it derives a key

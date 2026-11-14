@@ -40,6 +40,12 @@ define('DOWNLOAD_TIMEOUT',        300);  // cURL download timeout (seconds)
 define('LOCK_TIMEOUT',            1200); // Stale lock auto-release (seconds)
 define('HOOK_TIMEOUT',            300);  // Max seconds for a single deploy hook command
 
+// Password-protect .env files inside backup zips (AES-256, key derived from
+// SECRET_KEY). Default false: backups hold .env as plain text, so anyone who
+// can read storage/backups/ can read your secrets. Restore works either way.
+// Needs PHP 7.2+ / libzip 1.2+. Changing SECRET_KEY orphans encrypted .env files.
+define('BACKUP_ENCRYPT_ENV', false);
+
 // ---- Deploy Strategy ----
 // 'auto'    → detect symlink capability on first deploy and cache the result
 // 'symlink' → force symlink mode (requires webroot to point at target/current)

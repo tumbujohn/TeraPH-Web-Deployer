@@ -155,6 +155,29 @@ environment variables from the browser instead of editing files by hand.
 5. The **Preview** card shows exactly what will be written on the next deploy, with all
    values masked.
 
+**Working with the live file**
+
+6. The **Live .env** card compares the `.env` on the server with what the manager would write
+   and lists any differences by key name (never values).
+7. **Apply now** writes the `.env` immediately without a deploy. Optionally add a command to
+   run afterwards (for example `php artisan config:cache`) — tick *Run the command* and press
+   **Apply now**. It shows up in Logs like a deploy and can't run while a deploy is running.
+8. **Pull from live** brings an existing site's current `.env` under management: new keys are
+   added and empty values filled in, nothing is deleted. If a key already has a different
+   stored value you're asked whether to replace it or keep yours.
+
+**Editing tools**
+
+9. Use the **filter box** above the Values table to find a key, and drag the ⋮⋮ handle (or use
+   ▲ ▼) to reorder; **Save Values** keeps the order and rearranges the template to match.
+10. **Bulk edit as text** lets you edit every value as `KEY=value` lines. Keys you leave out
+    are not touched.
+11. **Copy from another project** merges another project's variables into this one.
+12. **Encrypted export / import** saves a passphrase-protected file you can keep or move to
+    another install. Keep the passphrase safe — it cannot be recovered.
+
+> Values containing line breaks (like a private key) show their line breaks as `\n` in the
+> masked field; edit with care or use Bulk edit.
 Values are stored encrypted and are never written to any deploy log.
 
 > If your administrator hasn't set a dedicated encryption key on the server, you'll see a

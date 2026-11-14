@@ -55,8 +55,17 @@ class DeployService
         $zipPath    = null;
         $extractDir = null;
         $backupPath = null;
+        $envManaged = ($project['env_mode'] ?? 'none') === 'managed';
 
         try {
+            // ---- Step 1b: Env preflight ------------------------------------
+            // Runs before the download, the backup and any change to the target,
+            // so a bad env config can never leave the live site half-deployed.
+            if ($envManaged) {
+                EnvVar::assertDeployable($projectId);
+                DeploymentLog::info($deploymentId, 'Env preflight passed.');
+            }
+
             // ---- Step 2: Acquire zip archive -------------------------------
             if (isset($project['source_type']) && $project['source_type'] === 'manual') {
                 DeploymentLog::info($deploymentId, "Using saved manual upload archive...");
@@ -100,6 +109,30 @@ class DeployService
             }
             DeploymentLog::info($deploymentId, "Structure validation passed.");
 
+            // ---- Step 4b: Compare release .env.example with managed keys ---
+            // Advisory only: warns about keys the new code expects that the env
+            // manager doesn't provide, so they show up in the log, not in prod.
+            if ($envManaged) {
+                $examplePath = rtrim($extractedRoot, '/\\') . '/.env.example';
+                if (is_file($examplePath)) {
+                    $diff = EnvVar::compareWithExample($projectId, (string) file_get_contents($examplePath));
+                    if (!empty($diff['missing'])) {
+                        DeploymentLog::warning($deploymentId, 'Release .env.example has key(s) not managed here, so they will not be in the written .env: ' . implode(', ', $diff['missing']));
+                    }
+                    if (!empty($diff['empty'])) {
+                        DeploymentLog::warning($deploymentId, 'Managed key(s) listed in .env.example have no value: ' . implode(', ', $diff['empty']));
+                    }
+                    if (!empty($diff['unused'])) {
+                        DeploymentLog::info($deploymentId, 'Managed key(s) no longer in release .env.example: ' . implode(', ', $diff['unused']));
+                    }
+                    if (empty($diff['missing']) && empty($diff['empty'])) {
+                        DeploymentLog::info($deploymentId, 'Release .env.example matches managed keys.');
+                    }
+                } else {
+                    DeploymentLog::info($deploymentId, 'Release has no .env.example — skipping key comparison.');
+                }
+            }
+
             // ---- Step 5: Backup current version ----------------------------
             DeploymentLog::info($deploymentId, "Creating pre-deploy backup...");
             $backupPath = $this->backup->create($project, $deploymentId);
@@ -113,7 +146,6 @@ class DeployService
             // ---- Step 6: Clear target directory ----------------------------
             $targetDir  = $project['target_path'];
             $skipPaths  = ($mode === 'safe') ? Project::getSafeKeepPaths($project) : [];
-            $envManaged = ($project['env_mode'] ?? 'none') === 'managed';
 
             // When env manager is active, .env is written fresh every deploy —
             // remove it from safe_keep so the old file doesn't persist.
@@ -167,23 +199,9 @@ class DeployService
 
             // ---- Step 7b: Write managed .env -------------------------------
             if ($envManaged) {
-                $missing = EnvVar::missingRequired((int) $project['id']);
-                if (!empty($missing)) {
-                    throw new RuntimeException(
-                        'Managed .env has missing required value(s): ' . implode(', ', $missing)
-                    );
-                }
-
-                $envVarsAll    = EnvVar::allForProject((int) $project['id']);
-                $dotEnvContent = EnvVar::renderDotEnv(
-                    (int) $project['id'],
-                    $project['env_template'] ?? null
-                );
-                $dotEnvPath = rtrim($targetDir, '/\\') . DIRECTORY_SEPARATOR . '.env';
-                if (file_put_contents($dotEnvPath, $dotEnvContent) === false) {
-                    throw new RuntimeException("Failed to write managed .env to: {$dotEnvPath}");
-                }
-                DeploymentLog::info($deploymentId, "Wrote managed .env (" . count($envVarsAll) . " variable(s)) to target.");
+                // Mode 0640; Step 8 skips .env so the permission sweep leaves it alone.
+                $written = EnvVar::writeToTarget($project);
+                DeploymentLog::info($deploymentId, "Wrote managed .env ({$written} variable(s), mode 0640) to target.");
             }
 
             // ---- Step 7a: Run pre-deploy hooks -----------------------------
@@ -205,7 +223,7 @@ class DeployService
 
             // ---- Step 8: Set permissions -----------------------------------
             DeploymentLog::info($deploymentId, "Setting file permissions (dirs: 755, files: 644)...");
-            $this->fileManager->setPermissions($targetDir, $skipPaths);
+            $this->fileManager->setPermissions($targetDir, $envManaged ? array_merge($skipPaths, ['.env']) : $skipPaths);
 
             // ---- Step 8a: Run post-deploy hooks ----------------------------
             $postHooks = Project::getDeployHooks($project, 'post');

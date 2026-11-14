@@ -30,6 +30,13 @@ Priority tiers follow the original roadmap naming: **P0** (correctness & safety)
       new `login_attempts` table); lock out after N failures within a window.
 - [ ] **Secure session cookie flag.** Set `cookie_secure => !DEV_MODE` alongside the
       existing `cookie_httponly`/`cookie_samesite` in `app_boot()`.
+- [ ] **Backup restore drops top-level files when the archive has one top-level directory.**
+      `FileManager::extract()` strips a GitHub-style wrapper folder whenever
+      `glob($destDir . '/*', GLOB_ONLYDIR)` finds exactly one directory, ignoring top-level
+      files. A backup of a target with one top-level dir plus files (e.g. `app/`, `index.php`,
+      `.env`) therefore restores only that directory's contents. Fix: strip the wrapper only
+      when the directory is the *sole* entry in the archive, or give `extract()` a flag so
+      `BackupService::restore()` never strips.
 - [ ] **P0.1 — Atomic symlink-based releases.** `DEPLOY_STRATEGY` and
       `detect_deploy_strategy()` exist but the pipeline never branches on the result —
       `DeployService` always calls `FileManager::clear()`/`copyContents()` in place. Needs a
@@ -78,6 +85,49 @@ Priority tiers follow the original roadmap naming: **P0** (correctness & safety)
 - [ ] **Delete `scripts/probe.php` guidance.** It's a diagnostic tool meant to be removed
       after use, same as `scripts/install.php` — consider adding it to the Security
       Checklist in the README explicitly.
+
+---
+
+## Suggestions To Be Reviewed
+
+Ideas from an Env Manager review. Not committed work — each needs a yes/no (and, where
+noted, a design decision) before it moves into a priority tier above.
+
+### Env Manager
+
+- [ ] **Per-deployment env snapshot + change audit log.** Store an encrypted snapshot of the
+      rendered env with each deployment row, plus a log of key changes (key, when, old→new
+      hash). Rollback/restore could then bring back the matching env — today restoring a
+      backup brings back whatever `.env` was on disk then, which no longer matches the
+      manager. Also enables a diff of env between two releases.
+- [ ] **Write-only secrets.** An `is_secret` flag per key: secret values are never sent
+      back to the browser (UI shows `•••• (set)`, replaced only when a new value is typed),
+      and revealing one requires re-entering the admin password. Closes the remaining gap
+      that values are present in the page source even though the inputs are masked.
+- [x] **Apply now / pull from live / drift check.** *(done)*
+      *Apply now:* write the `.env` (and optionally run a hook such as `config:cache`)
+      without a full deploy. *Pull from live:* import the target's current `.env` with its
+      values, not just `.env.example`, for onboarding an existing site.
+      *Drift check:* compare the on-disk `.env` with what the manager would render.
+- [ ] **Pass the project's env to hooks.** `HookRunner::buildEnv()` currently only passes
+      `getenv()` through. Merging the managed variables would let `composer`/`artisan`/
+      `spark` hooks see them even before the file exists. Needs a decision on secrets
+      appearing in process environments.
+- [ ] **Value generators and validation.** Generate Laravel `APP_KEY` (`base64:` + 32 random
+      bytes), CI4 `encryption.key`, random hex/passwords; optional per-key type
+      (string/int/bool/url/email/regex) checked on save and in the deploy preflight; use the
+      `#` comment above a key in the template as its hint text.
+- [ ] **Shared variable groups.** Reusable sets (SMTP, S3, Sentry) attachable to several
+      projects, with per-project overrides, so a shared credential is updated once.
+- [ ] **Flexible output.** Configurable file name/path (`.env.production`, `app/.env`,
+      CI4's `env`) and other formats: a PHP `config.local.php` returning an array, or
+      `SetEnv` lines for `.htaccess`.
+- [ ] **Encryption key rotation.** Prefix stored values with a key ID and add a re-encrypt
+      action in Settings, so changing `SECRET_KEY` (or the password hash fallback — see
+      DECISIONS.md) stops being permanent data loss.
+- [x] **Editing quality of life.** *(done)* Raw-text bulk editor (parsed through `env_parse_pairs`),
+      search/filter for long lists, drag-to-reorder, copy env from another project,
+      encrypted export/import.
 
 ---
 

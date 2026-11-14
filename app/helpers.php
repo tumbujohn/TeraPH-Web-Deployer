@@ -318,27 +318,67 @@ function env_encrypt(string $value): string
  */
 function env_decrypt(string $enc): string
 {
+    return env_decrypt_strict($enc) ?? '';
+}
+
+/**
+ * Like env_decrypt() but distinguishes failure from an empty value:
+ * returns null when a non-empty ciphertext cannot be decrypted (wrong
+ * SECRET_KEY, corrupt data) and '' only for genuinely empty input.
+ */
+function env_decrypt_strict(string $enc): ?string
+{
     if ($enc === '') return '';
     $key = env_encryption_key();
 
     if (str_starts_with($enc, 'g:')) {
         // AES-256-GCM — nonce[12] + tag[16] + ciphertext
         $raw = base64_decode(substr($enc, 2), true);
-        if ($raw === false || strlen($raw) <= 28) return '';
+        if ($raw === false || strlen($raw) <= 28) return null;
         $nonce = substr($raw, 0, 12);
         $tag   = substr($raw, 12, 16);
         $ct    = substr($raw, 28);
         $dec   = openssl_decrypt($ct, 'AES-256-GCM', $key, OPENSSL_RAW_DATA, $nonce, $tag);
-        return $dec !== false ? $dec : '';
+        return $dec !== false ? $dec : null;
     }
 
     // Legacy AES-256-CBC (no prefix) — iv[16] + ciphertext
     $raw = base64_decode($enc, true);
-    if ($raw === false || strlen($raw) <= 16) return '';
+    if ($raw === false || strlen($raw) <= 16) return null;
     $iv  = substr($raw, 0, 16);
     $ct  = substr($raw, 16);
     $dec = openssl_decrypt($ct, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
-    return $dec !== false ? $dec : '';
+    return $dec !== false ? $dec : null;
+}
+
+/**
+ * Whether backups should password-protect .env files inside the zip.
+ * Controlled by BACKUP_ENCRYPT_ENV in config.php; unencrypted by default and
+ * when the constant is absent (configs created before it existed).
+ */
+function backup_encrypt_env(): bool
+{
+    return defined('BACKUP_ENCRYPT_ENV') && BACKUP_ENCRYPT_ENV === true;
+}
+
+/**
+ * Password for encrypted zip entries, derived from the env encryption key so
+ * it needs no extra secret. Changing SECRET_KEY makes the .env files in
+ * encrypted backups unrecoverable, the same as the stored env values.
+ */
+function backup_zip_password(): string
+{
+    return hash_hmac('sha256', 'teraph:backup', env_encryption_key());
+}
+
+/**
+ * True for real env files (.env, .env.local, .env.production); false for
+ * templates (.env.example, .env.sample, .env.dist), which hold no secrets.
+ */
+function is_env_secret_file(string $basename): bool
+{
+    return (bool) preg_match('/^\.env(\..+)?$/', $basename)
+        && !preg_match('/\.(example|sample|dist)$/i', $basename);
 }
 
 /**
@@ -350,7 +390,7 @@ function env_decrypt(string $enc): string
 function env_parse_keys(string $template): array
 {
     $keys = [];
-    foreach (explode("\n", $template) as $line) {
+    foreach (env_logical_lines($template) as $line) {
         $line = trim($line);                                    // full trim catches indented comments
         if ($line === '' || str_starts_with($line, '#')) continue;
         $line = (string) preg_replace('/^export\s+/i', '', $line); // strip bash 'export KEY=' prefix
@@ -376,7 +416,7 @@ function env_parse_keys(string $template): array
 function env_parse_pairs(string $template): array
 {
     $pairs = [];
-    foreach (explode("\n", $template) as $line) {
+    foreach (env_logical_lines($template) as $line) {
         $line = trim($line);
         if ($line === '' || str_starts_with($line, '#')) continue;
         $line = (string) preg_replace('/^export\s+/i', '', $line);
@@ -440,6 +480,317 @@ function env_unquote(string $raw): string
 }
 
 /**
+ * If the first assignment in $text opens a quoted value that is not closed
+ * within $text, returns the quote character; otherwise null.
+ * Double quotes honour backslash escapes; single quotes are literal.
+ */
+function env_open_quote(string $text): ?string
+{
+    $t = ltrim($text);
+    if ($t === '' || $t[0] === '#') return null;
+    $t  = (string) preg_replace('/^export\s+/i', '', $t);
+    $eq = strpos($t, '=');
+    if ($eq === false) return null;
+    $v = ltrim(substr($t, $eq + 1));
+    if ($v === '' || ($v[0] !== '"' && $v[0] !== "'")) return null;
+
+    $q   = $v[0];
+    $len = strlen($v);
+    for ($i = 1; $i < $len; $i++) {
+        if ($q === '"' && $v[$i] === '\\') { $i++; continue; }
+        if ($v[$i] === $q) return null;
+    }
+    return $q;
+}
+
+/**
+ * Splits .env text into logical lines. A quoted value that runs over several
+ * physical lines (a PEM key, say) is returned as one entry, joined with "\n".
+ * An opening quote that is never closed is NOT allowed to swallow the rest of
+ * the file: that line stands alone.
+ *
+ * @return string[]
+ */
+function env_logical_lines(string $text): array
+{
+    $raw = explode("\n", $text);
+    $n   = count($raw);
+    $out = [];
+    for ($i = 0; $i < $n; $i++) {
+        $line = $raw[$i];
+        if (env_open_quote($line) !== null) {
+            $joined = $line;
+            for ($j = $i + 1; $j < $n; $j++) {
+                $joined .= "\n" . $raw[$j];
+                if (env_open_quote($joined) === null) {
+                    $line = $joined;
+                    $i    = $j;
+                    break;
+                }
+            }
+        }
+        $out[] = $line;
+    }
+    return $out;
+}
+
+/**
+ * Escapes backslashes and line breaks (`\`, CR, LF -> `\\`, `\r`, `\n`) so a
+ * multi-line value fits in a single-line <input>, which would otherwise strip
+ * the line breaks. Reverse with env_unescape_lines().
+ */
+function env_escape_lines(string $v): string
+{
+    return str_replace(['\\', "\r", "\n"], ['\\\\', '\\r', '\\n'], $v);
+}
+
+/**
+ * Reverses env_escape_lines(). Only meaningful for fields the page flagged as
+ * escaped — applying it to an ordinary value would turn a literal `\n` into a
+ * line break.
+ */
+function env_unescape_lines(string $v): string
+{
+    return strtr($v, ['\\\\' => '\\', '\\n' => "\n", '\\r' => "\r"]);
+}
+
+/**
+ * Blanks every value in a template (`KEY=secret` becomes `KEY=`), keeping
+ * comments, blank lines, order and `export` prefixes. The stored template only
+ * describes structure; values live encrypted in project_env_vars. Without this,
+ * pasting or pulling a real .env would leave every secret in plaintext in
+ * projects.env_template. Idempotent.
+ */
+function env_template_scrub(string $template): string
+{
+    $out = [];
+    foreach (env_logical_lines($template) as $line) {
+        $key = env_line_key($line);
+        if ($key === null) {
+            $out[] = $line;
+            continue;
+        }
+        $out[] = (preg_match('/^\s*export\s+/i', $line) ? 'export ' : '') . $key . '=';
+    }
+    return implode("\n", $out);
+}
+
+/**
+ * True if any assignment in the template carries a non-empty value.
+ */
+function env_template_has_values(string $template): bool
+{
+    foreach (env_parse_pairs($template) as $value) {
+        if ($value !== '') return true;
+    }
+    return false;
+}
+
+/**
+ * Reorders a template's assignments to follow $order (a list of key names).
+ * Each assignment moves together with the comment/blank lines directly above it;
+ * lines after the last assignment stay at the end. Keys not named in $order keep
+ * their relative order after the named ones.
+ *
+ * @param string[] $order
+ */
+function env_template_reorder(string $template, array $order): string
+{
+    $blocks  = [];   // key => lines
+    $pending = [];
+    foreach (env_logical_lines($template) as $line) {
+        $pending[] = $line;
+        $key = env_line_key($line);
+        if ($key !== null) {
+            $blocks[$key] = array_merge($blocks[$key] ?? [], $pending);
+            $pending      = [];
+        }
+    }
+    $tail = $pending;
+
+    $out  = [];
+    $done = [];
+    foreach ($order as $key) {
+        if (isset($blocks[$key]) && !isset($done[$key])) {
+            array_push($out, ...$blocks[$key]);
+            $done[$key] = true;
+        }
+    }
+    foreach ($blocks as $key => $lines) {
+        if (!isset($done[$key])) {
+            array_push($out, ...$lines);
+        }
+    }
+    array_push($out, ...$tail);
+    return implode("\n", $out);
+}
+
+/**
+ * Compares two KEY => value maps without exposing any value.
+ *
+ * @param array<string,string> $managed  what the manager would write
+ * @param array<string,string> $disk     what is in the file now
+ * @return array{missing:string[], extra:string[], changed:string[]}
+ *         missing = managed but not on disk, extra = on disk but not managed,
+ *         changed = in both with different values
+ */
+function env_diff_pairs(array $managed, array $disk): array
+{
+    $changed = [];
+    foreach ($managed as $key => $value) {
+        if (array_key_exists($key, $disk) && $disk[$key] !== $value) {
+            $changed[] = (string) $key;
+        }
+    }
+    return [
+        'missing' => array_map('strval', array_values(array_diff(array_keys($managed), array_keys($disk)))),
+        'extra'   => array_map('strval', array_values(array_diff(array_keys($disk), array_keys($managed)))),
+        'changed' => $changed,
+    ];
+}
+
+/**
+ * Encrypts an env bundle with a passphrase (PBKDF2-SHA256 -> AES-256-GCM) and
+ * returns a self-describing JSON document. The passphrase, not SECRET_KEY, is
+ * the key, so a bundle can be moved between installs.
+ *
+ * @param array<string,mixed> $payload
+ * @throws RuntimeException if encryption is unavailable
+ */
+function env_bundle_encrypt(array $payload, string $passphrase): string
+{
+    $iter  = 200000;
+    $salt  = random_bytes(16);
+    $nonce = random_bytes(12);
+    $key   = hash_pbkdf2('sha256', $passphrase, $salt, $iter, 32, true);
+    $tag   = '';
+    $ct    = openssl_encrypt(
+        (string) json_encode($payload, JSON_UNESCAPED_SLASHES),
+        'AES-256-GCM', $key, OPENSSL_RAW_DATA, $nonce, $tag, 'teraph-env-bundle-v1', 16
+    );
+    if ($ct === false) {
+        throw new RuntimeException('AES-256-GCM is not available on this server.');
+    }
+    return (string) json_encode([
+        'teraph_env_bundle' => 1,
+        'kdf'               => 'pbkdf2-sha256',
+        'iter'              => $iter,
+        'salt'              => base64_encode($salt),
+        'nonce'             => base64_encode($nonce),
+        'tag'               => base64_encode($tag),
+        'ct'                => base64_encode($ct),
+    ], JSON_PRETTY_PRINT);
+}
+
+/**
+ * Decrypts a document produced by env_bundle_encrypt().
+ *
+ * @return array<string,mixed>
+ * @throws RuntimeException for a malformed file or a wrong passphrase
+ */
+function env_bundle_decrypt(string $document, string $passphrase): array
+{
+    $d = json_decode($document, true);
+    if (!is_array($d) || ($d['teraph_env_bundle'] ?? null) !== 1
+        || !isset($d['salt'], $d['nonce'], $d['tag'], $d['ct'], $d['iter'])) {
+        throw new RuntimeException('This is not a TeraPH env bundle.');
+    }
+    $iter = (int) $d['iter'];
+    if ($iter < 10000 || $iter > 1000000) {   // bound it: a crafted file must not pick the CPU cost
+        throw new RuntimeException('Unsupported bundle parameters.');
+    }
+    $salt  = base64_decode((string) $d['salt'], true);
+    $nonce = base64_decode((string) $d['nonce'], true);
+    $tag   = base64_decode((string) $d['tag'], true);
+    $ct    = base64_decode((string) $d['ct'], true);
+    if ($salt === false || $nonce === false || $tag === false || $ct === false) {
+        throw new RuntimeException('The bundle file is corrupt.');
+    }
+    $key   = hash_pbkdf2('sha256', $passphrase, $salt, $iter, 32, true);
+    $plain = openssl_decrypt($ct, 'AES-256-GCM', $key, OPENSSL_RAW_DATA, $nonce, $tag, 'teraph-env-bundle-v1');
+    if ($plain === false) {
+        throw new RuntimeException('Wrong passphrase, or the bundle file is damaged.');
+    }
+    $payload = json_decode($plain, true);
+    if (!is_array($payload) || !isset($payload['vars']) || !is_array($payload['vars'])) {
+        throw new RuntimeException('The bundle contents are invalid.');
+    }
+    return $payload;
+}
+/**
+ * Returns the key a template line assigns (ignoring a leading `export`), or
+ * null for blank lines, comments and lines that aren't assignments.
+ */
+function env_line_key(string $line): ?string
+{
+    $line = trim($line);
+    if ($line === '' || str_starts_with($line, '#')) return null;
+    $line = (string) preg_replace('/^export\s+/i', '', $line);
+    $eq   = strpos($line, '=');
+    if ($eq === false) return null;
+    $key = rtrim(substr($line, 0, $eq));
+    return ($key !== '' && !preg_match('/[\s#=]/', $key)) ? $key : null;
+}
+
+/**
+ * Removes every assignment line for $key from a template; comments and
+ * unrelated lines are kept verbatim.
+ */
+function env_template_remove_key(string $template, string $key): string
+{
+    $kept = array_filter(
+        env_logical_lines($template),
+        fn(string $line) => env_line_key($line) !== $key
+    );
+    return implode("\n", $kept);
+}
+
+/**
+ * Renames $old to $new on every assignment line in a template, preserving
+ * indentation, any `export` prefix, and the rest of the line.
+ */
+function env_template_rename_key(string $template, string $old, string $new): string
+{
+    $pattern = '/^(\s*(?:export\s+)?)' . preg_quote($old, '/') . '(?=\s*=)/i';
+    $lines   = env_logical_lines($template);
+    foreach ($lines as &$line) {
+        if (env_line_key($line) === $old) {
+            $line = (string) preg_replace_callback($pattern, fn(array $m) => $m[1] . $new, $line);
+        }
+    }
+    unset($line);
+    return implode("\n", $lines);
+}
+
+/**
+ * Formats a plain value for the right-hand side of KEY=value in a .env file.
+ *
+ * - Plain values are written bare.
+ * - Values with whitespace, quotes or # are double-quoted with `"` and `\` escaped
+ *   (understood the same way by phpdotenv and CodeIgniter 4's DotEnv).
+ * - Values containing `${` are single-quoted when that is safe. Both parsers expand
+ *   `${NAME}` references to defined variables, and phpdotenv treats single quotes as
+ *   literal, so `pa${HOME}ss` survives intact.
+ *
+ * Limitations (see DECISIONS.md): a `${` value that ALSO contains a `'`, backslash or
+ * newline can't be single-quoted (single quotes can't hold a `'`, and CI4 un-escapes
+ * backslashes inside them), so it falls through to the rules above and phpdotenv may
+ * still expand it. And CI4's DotEnv expands `${NAME}` inside any quotes with no
+ * escape, so a `${NAME}` naming a variable defined there cannot be written safely.
+ */
+function env_quote_value(string $val): string
+{
+    if ($val === '') return '';
+    if (str_contains($val, '${') && !preg_match('/[\'\\\\\r\n]/', $val)) {
+        return "'" . $val . "'";
+    }
+    if (preg_match('/[\s"\'#]/', $val)) {
+        return '"' . addcslashes($val, '"\\') . '"';
+    }
+    return $val;
+}
+
+/**
  * Renders a .env file string by merging stored values into a template.
  * Lines that match KEY= (with any value) have their value replaced by $values[$key].
  * Comment and blank lines are preserved as-is.
@@ -449,7 +800,7 @@ function env_unquote(string $raw): string
  */
 function env_render(string $template, array $values): string
 {
-    $lines  = explode("\n", $template);
+    $lines  = env_logical_lines($template);
     $output = [];
     foreach ($lines as $line) {
         $rtrimmed = rtrim($line);
@@ -468,12 +819,7 @@ function env_render(string $template, array $values): string
         }
         $key = rtrim(substr($bare, 0, $eq));
         if (isset($values[$key])) {
-            $val = $values[$key];
-            // Quote values that contain spaces or special chars
-            if (preg_match('/[\s"\'#]/', $val)) {
-                $val = '"' . addcslashes($val, '"\\') . '"';
-            }
-            $output[] = ($hasExport ? 'export ' : '') . $key . '=' . $val;
+            $output[] = ($hasExport ? 'export ' : '') . $key . '=' . env_quote_value($values[$key]);
         } else {
             $output[] = $rtrimmed;
         }

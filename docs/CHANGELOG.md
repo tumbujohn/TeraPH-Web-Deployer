@@ -6,6 +6,38 @@ tagged releases yet — entries are grouped by date. Format loosely follows
 
 ---
 
+## Unreleased
+
+### Added
+- `BACKUP_ENCRYPT_ENV` config option (default `false`) to AES-256 password-protect `.env` files inside backup zips; restore decrypts transparently
+- .env Manager **Live .env** card: drift check against the server's `.env` (key names only), **Apply now** (write the `.env` without a deploy, optionally run a stored command; recorded as an `env_apply` deployment), and **Pull from live** (import the target's current `.env`; never deletes; asks before replacing differing stored values)
+- .env Manager editing tools: filter keys, drag/▲▼ reorder (also reorders the template), bulk edit as `KEY=value` text, copy from another project, and passphrase-encrypted export/import
+- Migration 005 adds `projects.env_apply_cmd`
+- One-click scrub for templates saved by earlier versions that still hold plaintext values
+
+- Env preflight: managed-env deploys now fail before the download/backup/target changes if a required key is empty or a stored value cannot be decrypted
+- Deploy log compares the release's `.env.example` with managed keys and warns about unmanaged or empty keys
+- Env Manager flags undecryptable values (`⚠ unreadable` badge and banner)
+
+- Env Manager asks before dropping keys: a template save or `.env.example` import that would remove existing keys now shows what would be deleted (and which hold values) and offers remove or keep
+
+### Fixed
+- The .env Manager never displayed its flash messages (the page consumed them before rendering), so errors such as "Key already exists" were silent
+- Values containing line breaks (e.g. PEM keys) were flattened by the single-line value field and corrupted on the next save; they are now shown escaped (`\n`) and decoded on save, and multi-line quoted values in imported text parse as one entry instead of producing junk keys
+- The stored env template kept pasted values in plaintext and re-saving it could overwrite newer values with stale ones; values are now scrubbed from the template on every save
+
+### Changed
+- Managed `.env` values containing `${` are written single-quoted so phpdotenv no longer expands them (see DECISIONS.md for the CI4 caveat); all other quoting is unchanged
+- Env template saves and key add/rename/delete are atomic (single transaction)
+- Deleting a key now also removes its template line, so it no longer reappears on the next template save or leaves a placeholder in the deployed `.env`; renaming handles `export`/spaced assignments and names containing `$`
+- Required-key check moved from after the target was cleared to before any deploy work (previously a missing required key left the live site with new code and no `.env`)
+- Re-saving a template or re-importing `.env.example` no longer resets keys' required flags
+- Env Manager value fields are masked by default (`type=password`, `autocomplete=new-password`)
+- The managed `.env` is written with mode `0640` instead of `0644`
+- Backup restore now extracts and validates the archive before clearing the target, and extraction failures throw instead of being ignored
+
+---
+
 ## 2026-06-15 — File Safety, Env Manager Completion, Project Deletion
 
 ### Added

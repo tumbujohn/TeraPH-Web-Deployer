@@ -13,10 +13,11 @@ class FileManager
      *
      * @param  string $zipPath  Path to the zip archive
      * @param  string $destDir  Destination directory (will be created if not exists)
+     * @param  string|null $password  Password for encrypted entries (ignored by unencrypted ones)
      * @return string  Absolute path to the extracted content directory
      * @throws RuntimeException on extraction failure
      */
-    public function extract(string $zipPath, string $destDir): string
+    public function extract(string $zipPath, string $destDir, ?string $password = null): string
     {
         if (!is_dir($destDir) && !mkdir($destDir, 0755, true)) {
             throw new RuntimeException("Cannot create extraction directory: {$destDir}");
@@ -29,7 +30,14 @@ class FileManager
             throw new RuntimeException("Cannot open zip archive: {$zipPath} (error code: {$result})");
         }
 
-        $zip->extractTo($destDir);
+        if ($password !== null) {
+            $zip->setPassword($password);
+        }
+
+        if (!$zip->extractTo($destDir)) {
+            $zip->close();
+            throw new RuntimeException("Failed to extract archive (corrupt, or wrong password for encrypted entries): {$zipPath}");
+        }
         $zip->close();
 
         // Strip top-level wrapper folder GitHub adds (repo-branchname/)

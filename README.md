@@ -269,6 +269,7 @@ define('MAX_BACKUPS_PER_PROJECT', 10);   // Oldest backups auto-deleted past thi
 define('DOWNLOAD_TIMEOUT',        300);  // Max seconds to wait for GitHub zip download
 define('LOCK_TIMEOUT',            1200); // Seconds before a stuck deploy lock is auto-released
 define('HOOK_TIMEOUT',            300);  // Max seconds a single pre/post deploy hook may run
+define('BACKUP_ENCRYPT_ENV',      false); // true = AES-256 password-protect .env files inside backup zips
 ```
 
 ---

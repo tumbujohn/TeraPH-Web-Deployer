@@ -60,13 +60,15 @@ session. There is no router; each `.php` file under `public/` is its own endpoin
 │       ├── FileManager.php        # extract / copyContents / clear / setPermissions
 │       ├── BackupService.php      # Zip backup + restore (deployer-aware, symlink-aware)
 │       ├── HookRunner.php         # proc_open command execution, {composer} resolution
+│       ├── EnvApplyService.php    # "Apply now": write the managed .env without a deploy
 │       └── DeployService.php      # Deployment pipeline orchestrator
 │
 ├── migrations/                    # NOT web-accessible. Additive only — see DECISIONS.md
 │   ├── 001_initial_schema.php
 │   ├── 002_manual_upload_support.php
 │   ├── 003_project_hooks_terminal.php
-│   └── 004_project_env_manager.php
+│   ├── 004_project_env_manager.php
+│   └── 005_env_apply_command.php
 │
 ├── public/                        # Web root — point your domain here
 │   ├── index.php                  # Dashboard: project list, deploy modal, project form
@@ -77,7 +79,7 @@ session. There is no router; each `.php` file under `public/` is its own endpoin
 │   ├── projects.php               # AJAX project CRUD
 │   ├── settings.php                # Installation-wide read-only overview
 │   ├── settings_action.php        # AJAX: clear_tmp, deploy_reconcile
-│   ├── env_manager.php            # Per-project .env editor (template + values)
+│   ├── env_manager.php            # Per-project .env editor (template, values, live .env, bulk tools)
 │   ├── migrate.php                # Browser-based migration runner
 │   ├── update.php                 # Self-update from GitHub
 │   ├── terminal_execute.php       # Streaming terminal endpoint (audited, guarded)
@@ -315,11 +317,27 @@ Per-project managed environment variables ([app/Models/EnvVar.php](../app/Models
 - **Rendering** (`EnvVar::renderDotEnv()`): merges decrypted values into the template
   (`env_render()`), preserving comments/blank lines and the `export ` prefix if present. If
   no template is stored, falls back to a flat `KEY=value` listing.
-- **Written at deploy time only** (`DeployService` step 7b), directly to
+- **Written at deploy time or on demand** (`DeployService` step 7b, or `EnvApplyService`), directly to
   `{target_path}/.env`. A deploy halts before any file changes reach the target if a
   required key (`is_required = 1`) has an empty value.
 - **Never logged.** Deploy log entries never contain env values; the in-UI preview masks
   all non-empty values.
+- **Stored template is structure only.** `EnvVar::setTemplate()` blanks every value
+  (`env_template_scrub()`), so secrets live only encrypted in `project_env_vars`.
+- **Shared write/preflight.** `EnvVar::assertDeployable()` (no unreadable or empty-required
+  values) and `EnvVar::writeToTarget()` (render + `0640` write) are used by both the deploy
+  pipeline and `EnvApplyService`, so the two cannot drift apart.
+- **Apply now** (`EnvApplyService::apply()`): preflight → write → optional stored command via
+  `HookRunner`. Recorded as a `deployments` row with `mode = 'env_apply'`, which also takes the
+  per-project lock.
+- **Drift** (`EnvVar::drift()`): parses the rendered output and the on-disk file with
+  `env_parse_pairs()` and diffs them by key (`env_diff_pairs()`); only names are ever returned.
+- **Merging** (`EnvVar::merge()`) is the one routine behind Pull from live, Copy from project and
+  bundle import; it never deletes and keeps every stored key listed in the template.
+- **Multi-line values.** `env_logical_lines()` joins a quoted value spanning several lines into
+  one entry (an unclosed quote never swallows the rest of the file). The page shows such values
+  escaped (`env_escape_lines()`) and decodes flagged rows on save.
+- **Atomic writes.** Multi-row operations run in `EnvVar::transaction()`.
 
 ---
 

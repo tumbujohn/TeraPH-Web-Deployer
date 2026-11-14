@@ -39,7 +39,7 @@ class BackupService
             }
         }
 
-        $this->addDirectoryToZip($zip, $targetDir, '', $deployerExcludeRel);
+        $this->addDirectoryToZip($zip, $targetDir, '', $deployerExcludeRel, backup_encrypt_env());
 
         $zip->close();
 
@@ -73,16 +73,19 @@ class BackupService
         if (is_dir($targetDir)) {
             $zip = new ZipArchive();
             $zip->open($safetyPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-            $this->addDirectoryToZip($zip, $targetDir, '');
+            $this->addDirectoryToZip($zip, $targetDir, '', null, backup_encrypt_env());
             $zip->close();
         }
 
-        // Clear target directory
-        $fileManager->clear($targetDir);
-
-        // Extract backup into target
+        // Extract first so a corrupt archive or wrong password fails before the
+        // target is cleared. The password is always supplied: unencrypted entries
+        // ignore it, and backups made while BACKUP_ENCRYPT_ENV was on still
+        // restore after it is turned off.
         $extractDir = TMP_PATH . '/' . $project['name'] . '_restore_' . date('YmdHis');
-        $extracted  = $fileManager->extract($backupPath, $extractDir);
+        $extracted  = $fileManager->extract($backupPath, $extractDir, backup_zip_password());
+
+        // Clear target directory, then copy the backup into it
+        $fileManager->clear($targetDir);
         $fileManager->copyContents($extracted, $targetDir);
         $fileManager->setPermissions($targetDir);
         $fileManager->deleteDirectory($extractDir);
@@ -149,9 +152,25 @@ class BackupService
      * @param string      $dir         Absolute path to the directory to add
      * @param string      $zipRoot     Path prefix inside the zip archive
      * @param string|null $excludeRel  Relative path to exclude (e.g. deployer dir)
+     * @param bool        $encryptEnv  AES-256 password-protect .env files inside the archive
      */
-    private function addDirectoryToZip(ZipArchive $zip, string $dir, string $zipRoot, ?string $excludeRel = null): void
-    {
+    private function addDirectoryToZip(
+        ZipArchive $zip,
+        string     $dir,
+        string     $zipRoot,
+        ?string    $excludeRel = null,
+        bool       $encryptEnv = false
+    ): void {
+        if ($encryptEnv) {
+            if (!method_exists($zip, 'setEncryptionName') || !defined('ZipArchive::EM_AES_256')) {
+                throw new RuntimeException(
+                    'BACKUP_ENCRYPT_ENV is enabled but this PHP/libzip build cannot encrypt zip entries '
+                    . '(needs PHP 7.2+ with libzip 1.2+). Set BACKUP_ENCRYPT_ENV to false in config.php.'
+                );
+            }
+            $zip->setPassword(backup_zip_password());
+        }
+
         $realDir    = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', realpath($dir) ?: $dir), '/');
         $srcRootLen = strlen($realDir) + 1;
 
@@ -174,6 +193,9 @@ class BackupService
                 $zip->addEmptyDir($relativePath);
             } else {
                 $zip->addFile($item->getRealPath(), $relativePath);
+                if ($encryptEnv && is_env_secret_file(basename($relativePath))) {
+                    $zip->setEncryptionName($relativePath, ZipArchive::EM_AES_256);
+                }
             }
         }
     }
