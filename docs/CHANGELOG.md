@@ -6,39 +6,48 @@ tagged releases yet — entries are grouped by date. Format loosely follows
 
 ---
 
-## Unreleased
+## 2026-11-14 — .env Manager live tools, safer env handling, upgrade compatibility
+
+### Upgrade notes
+Updating an existing install is safe with its old `config.php` and database; migrations 005 and 006 run
+automatically on the next page load. Things worth knowing:
+- **`.env` file mode.** The managed `.env` mode comes from the new `ENV_FILE_MODE` constant. New installs get
+  `0640` from `config.php.example`; a `config.php` without the constant keeps the previous `0644`. Add
+  `define('ENV_FILE_MODE', 0640);` once you've confirmed your app can still read `.env`.
+- **Deploys now stop** (before anything is downloaded or changed) if a managed project has a required key left
+  empty or a stored value that cannot be decrypted (for example after `SECRET_KEY` changed). Previously such a
+  deploy silently wrote an empty value.
+- **Stored templates are scrubbed** of plaintext values by migration 006. The deployed `.env` does not change.
+- **Known limitation:** the self-updater still clears files before copying the new ones and is not atomic
+  (see `docs/TODO.md`). Take the backup it offers, and avoid updating during a deployment.
 
 ### Added
 - `BACKUP_ENCRYPT_ENV` config option (default `false`) to AES-256 password-protect `.env` files inside backup zips; restore decrypts transparently
-- .env Manager **Live .env** card: drift check against the server's `.env` (key names only), **Apply now** (write the `.env` without a deploy, optionally run a stored command; recorded as an `env_apply` deployment), and **Pull from live** (import the target's current `.env`; never deletes; asks before replacing differing stored values)
+- `ENV_FILE_MODE` config option for the managed `.env` permissions (see upgrade notes)
+- .env Manager **Live .env** card: drift check against the server's `.env` (key names only), **Apply now** (write the `.env` without a deploy, optionally run a stored command; recorded as an `env_apply` deployment) and **Pull from live** (import the target's current `.env`; never deletes; asks before replacing differing stored values)
 - .env Manager editing tools: filter keys, drag/▲▼ reorder (also reorders the template), bulk edit as `KEY=value` text, copy from another project, and passphrase-encrypted export/import
-- Migration 005 adds `projects.env_apply_cmd`
-- Migration 006 scrubs plaintext values out of templates saved by earlier versions automatically (the one-click banner remains as a fallback); the deployed `.env` is unchanged because only values the template alone supplied are saved first
-- Warning when a value contains `${NAME}`: shown in the .env Manager and logged on deploy/apply, because CodeIgniter 4's loader expands it inside any quotes and cannot be told not to
-
-- Env preflight: managed-env deploys now fail before the download/backup/target changes if a required key is empty or a stored value cannot be decrypted
+- Env preflight: managed-env deploys fail before the download/backup/target changes if a required key is empty or a stored value cannot be decrypted
 - Deploy log compares the release's `.env.example` with managed keys and warns about unmanaged or empty keys
-- Env Manager flags undecryptable values (`⚠ unreadable` badge and banner)
-
-- Env Manager asks before dropping keys: a template save or `.env.example` import that would remove existing keys now shows what would be deleted (and which hold values) and offers remove or keep
+- Env Manager flags undecryptable values (`⚠ unreadable` badge and banner) and asks before dropping keys when a template save or `.env.example` import would remove existing ones
+- Warning when a value contains `${NAME}`: shown in the .env Manager and logged on deploy/apply, because CodeIgniter 4's loader expands it inside any quotes and cannot be told not to
+- Migration 005 adds `projects.env_apply_cmd`; migration 006 scrubs plaintext values out of templates saved by earlier versions (the deployed `.env` is unchanged because only values the template alone supplied are saved first; a one-click banner remains as a fallback)
 
 ### Fixed
 - Backup restore (and any extraction) unwrapped an archive that had exactly one top-level folder even when files sat beside it, so restoring such a backup lost the top-level files and `.env`; a wrapper is now stripped only when it is the sole entry, and restore never strips
-- Topbar overflowed phone viewports by ~20px (brand name wrapped, action buttons ran off-screen) on every page
-- The .env Manager never displayed its flash messages (the page consumed them before rendering), so errors such as "Key already exists" were silent
 - Values containing line breaks (e.g. PEM keys) were flattened by the single-line value field and corrupted on the next save; they are now shown escaped (`\n`) and decoded on save, and multi-line quoted values in imported text parse as one entry instead of producing junk keys
+- Multi-line quoted value parsing no longer swallows keys after a typo such as `KEY="unterminated` followed by ordinary `KEY=value` lines (templates saved by older versions can contain these); such a quote is treated as a typo and read line-by-line like before
 - The stored env template kept pasted values in plaintext and re-saving it could overwrite newer values with stale ones; values are now scrubbed from the template on every save
+- The .env Manager never displayed its flash messages (the page consumed them before rendering), so errors such as "Key already exists" were silent
+- Topbar overflowed phone viewports by ~20px (brand name wrapped, action buttons ran off-screen) on every page
 
 ### Changed
-- Managed `.env` values containing `${` are written single-quoted so phpdotenv no longer expands them (see DECISIONS.md for the CI4 caveat); all other quoting is unchanged
-- Env template saves and key add/rename/delete are atomic (single transaction)
-- Deleting a key now also removes its template line, so it no longer reappears on the next template save or leaves a placeholder in the deployed `.env`; renaming handles `export`/spaced assignments and names containing `$`
+- The dashboard status badge and "last deployed" time ignore **Apply now** records, so applying or failing to apply an env change no longer makes a project look redeployed or failed
 - Required-key check moved from after the target was cleared to before any deploy work (previously a missing required key left the live site with new code and no `.env`)
+- Managed `.env` values containing `${` are written single-quoted so phpdotenv no longer expands them (see DECISIONS.md for the CI4 caveat); all other quoting is unchanged
+- Env template saves and key add/rename/delete are atomic (single transaction); deleting a key also removes its template line, and renaming handles `export`/spaced assignments and names containing `$`
 - Re-saving a template or re-importing `.env.example` no longer resets keys' required flags
 - Env Manager value fields are masked by default (`type=password`, `autocomplete=new-password`)
-- The managed `.env` is written with mode `0640` instead of `0644`
-- Backup restore now extracts and validates the archive before clearing the target, and extraction failures throw instead of being ignored
-
+- Backup restore extracts and validates the archive before clearing the target, and extraction failures throw instead of being ignored
 ---
 
 ## 2026-06-15 — File Safety, Env Manager Completion, Project Deletion

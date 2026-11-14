@@ -239,8 +239,10 @@ and write code with the deploy pipeline.
 **Alternatives considered:** A bare "write file" button — rejected, no audit trail and it could race
 a running deploy. Reusing the full deploy with a flag — rejected, it re-downloads and re-copies.
 
-**Consequences:** An apply appears in the deployment history and, like a restore, can become the
-"latest deployment" shown on the dashboard.
+**Consequences:** An apply appears in the deployment history and logs, but the dashboard's status
+badge and "last deployed" time skip `env_apply` rows (`Project::all()`): a project must not look
+redeployed — or failed — because only its environment file was rewritten. A restore, which does
+change the deployed code, still counts.
 
 ---
 

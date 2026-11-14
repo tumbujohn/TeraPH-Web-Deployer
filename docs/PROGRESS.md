@@ -62,7 +62,7 @@ atomic rollback, PAT encryption, and login throttling are not yet in place.
 - [x] **.env safety hardening** — preflight before download/backup (empty required keys,
       undecryptable values), release `.env.example` comparison, atomic template/key
       operations, confirmation before dropping keys, structure-only templates (migration 006
-      scrubs older ones), multi-line value support, `${NAME}` warning for CI4, `0640` file mode
+      scrubs older ones), multi-line value support, `${NAME}` warning for CI4, configurable `.env` file mode (`ENV_FILE_MODE`)
 - [x] **Optional backup `.env` encryption** (`BACKUP_ENCRYPT_ENV`, default off)
 - [x] **Backup restore layout fix** — `extract()` unwraps a folder only when it is the sole
       archive entry; restore never unwraps

@@ -331,7 +331,7 @@ Per-project managed environment variables ([app/Models/EnvVar.php](../app/Models
   (`env_template_scrub()`), so secrets live only encrypted in `project_env_vars`. Migration 006
   applies the same to older templates via `EnvVar::scrubTemplate()`.
 - **Shared write/preflight.** `EnvVar::assertDeployable()` (no unreadable or empty-required
-  values) and `EnvVar::writeToTarget()` (render + `0640` write) are used by both the deploy
+  values) and `EnvVar::writeToTarget()` (render + write with `env_file_mode()`) are used by both the deploy
   pipeline and `EnvApplyService`, so the two cannot drift apart.
 - **Apply now** (`EnvApplyService::apply()`): preflight → write → optional stored command via
   `HookRunner`. Recorded as a `deployments` row with `mode = 'env_apply'`, which also takes the

@@ -28,6 +28,16 @@ Priority tiers follow the original roadmap naming: **P0** (correctness & safety)
       values on next save. See [SECURITY.md](SECURITY.md).
 - [ ] **Login brute-force protection.** Track failed attempts by IP (additive migration —
       new `login_attempts` table); lock out after N failures within a window.
+- [ ] **Self-updater safety (`public/update.php`).** It deletes every file (except `config.php`
+      and `storage/`) *before* copying the new ones, so the site is broken for the duration and
+      permanently broken if the copy fails or times out (`set_time_limit(300)`); the pre-update
+      backup zip must then be restored by hand. It also runs from the old version, so fixes only
+      help the *next* update. Wanted: copy over existing files (replace per file, then prune
+      files absent from the release) instead of clear-then-copy; verify the downloaded package
+      first (required files present, `php -l` of the entry points, a release manifest declaring
+      minimum PHP version and extensions, checked against the host); on any failure or a failed
+      post-update bootstrap check, restore the pre-update zip automatically; refuse to start
+      while a deployment is running; optionally a short maintenance flag during the swap.
 - [ ] **Secure session cookie flag.** Set `cookie_secure => !DEV_MODE` alongside the
       existing `cookie_httponly`/`cookie_samesite` in `app_boot()`.
 - [ ] **P0.1 — Atomic symlink-based releases.** `DEPLOY_STRATEGY` and

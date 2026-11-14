@@ -128,6 +128,36 @@ completing work that touches the deploy pipeline, migrations, or auth:
 
 ---
 
+## 5.1 Upgrade compatibility (live instances)
+
+Live installs update themselves with `public/update.php`, which downloads `main`, takes a
+backup zip, then **clears every file except `config.php` and `storage/` and copies the new ones
+in** — it is not atomic, and the *running* updater is always the **old** version's. Anything a
+release needs must therefore work against an old `config.php`, an old database and old stored
+data:
+
+- **Config constants:** a new constant in `config.php.example` must be read through
+  `defined('X') ? X : <old behavior>`. Existing installs will not have it.
+- **Behavior changes are opt-in for existing installs.** Make the new default come from
+  `config.php.example` and keep the old behavior when the constant is absent (see
+  `env_file_mode()`).
+- **Schema:** additive migrations only, idempotent, safe to run on every request (see §2), and
+  never able to break a page load (wrap data migrations in `try/catch`).
+- **Stored data:** old encrypted values and templates must still decrypt/parse and render the
+  same bytes. Parsers must stay at least as tolerant as the ones they replace.
+- **PHP floor is 8.1** — no 8.2+ syntax or functions.
+- **Don't store anything in the install root that the updater would delete** — keep state under
+  `storage/`.
+
+To test an upgrade: export an older commit (`git archive <commit>`), give it a `config.php` from
+*its* `config.php.example`, seed it using that version's own code, apply the new tree with that
+version's `FileManager::clear()`/`copyContents()` exactly as `update.php` does, then drive the
+pages, a deploy, a restore of an old backup and a rollback (old code, migrated database). The
+last such run covered `7836bf1`, `a4b2e99`, `0bad01b`, `36cde87` and `fbdd94c`, with and without
+a `SECRET_KEY`.
+
+---
+
 ## 6. Debugging
 
 - **Stuck deployment ("⟳ Deploying" forever):** `php tera deploy:reconcile`, or the

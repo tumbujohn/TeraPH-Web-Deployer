@@ -22,6 +22,7 @@ class Project
                    ON d.id = (
                        SELECT id FROM deployments
                        WHERE project_id = p.id
+                         AND mode != 'env_apply'
                        ORDER BY started_at DESC
                        LIMIT 1
                    )

@@ -46,6 +46,13 @@ define('HOOK_TIMEOUT',            300);  // Max seconds for a single deploy hook
 // Needs PHP 7.2+ / libzip 1.2+. Changing SECRET_KEY orphans encrypted .env files.
 define('BACKUP_ENCRYPT_ENV', false);
 
+// Permission mode of the managed .env the .env Manager writes. 0640 = owner read/write, group
+// read, nothing for other users on a shared host. If the web server runs as a different user
+// than the one running the deployer (for example deploys started from SSH as another user) and
+// your app can't read .env after a deploy, set 0644. Installs whose config.php lacks this line
+// keep the older 0644 behavior.
+define('ENV_FILE_MODE', 0640);
+
 // ---- Deploy Strategy ----
 // 'auto'    → detect symlink capability on first deploy and cache the result
 // 'symlink' → force symlink mode (requires webroot to point at target/current)

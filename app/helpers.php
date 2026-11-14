@@ -362,6 +362,23 @@ function backup_encrypt_env(): bool
 }
 
 /**
+ * Permission mode for the managed .env, from ENV_FILE_MODE in config.php.
+ *
+ * New installs get 0640 from config.php.example. An install whose config.php predates
+ * the constant keeps the historical 0644, so updating never silently removes read access
+ * from a web server running as a different user than the deployer. Out-of-range values
+ * fall back to 0644 rather than writing an unreadable or world-writable file.
+ */
+function env_file_mode(): int
+{
+    if (!defined('ENV_FILE_MODE')) {
+        return 0644;
+    }
+    $mode = (int) ENV_FILE_MODE;
+    return ($mode >= 0400 && $mode <= 0644 && ($mode & 0400)) ? $mode : 0644;
+}
+
+/**
  * Password for encrypted zip entries, derived from the env encryption key so
  * it needs no extra secret. Changing SECRET_KEY makes the .env files in
  * encrypted backups unrecoverable, the same as the stored env values.
@@ -509,10 +526,19 @@ function env_open_quote(string $text): ?string
  * An opening quote that is never closed is NOT allowed to swallow the rest of
  * the file: that line stands alone.
  *
+ * Neither is a typo. Files written before multi-line support (and by hand) may hold
+ * `KEY="unterminated` followed by ordinary lines; if a line inside the would-be value
+ * looks like a fresh `UPPER_KEY=value` assignment, the quote is treated as a typo and
+ * the lines are left alone, exactly as the old line-based parser saw them. Base64
+ * padding (`QUJDRA==`) and empty assignments (`KEY=`) do not count as assignments.
+ *
  * @return string[]
  */
 function env_logical_lines(string $text): array
 {
+    $looksLikeAssignment = static fn(string $l): bool =>
+        (bool) preg_match('/^\s*(?:export\s+)?[A-Z][A-Z0-9_]{2,}\s*=\s*[^=\s]/', $l);
+
     $raw = explode("\n", $text);
     $n   = count($raw);
     $out = [];
@@ -521,6 +547,9 @@ function env_logical_lines(string $text): array
         if (env_open_quote($line) !== null) {
             $joined = $line;
             for ($j = $i + 1; $j < $n; $j++) {
+                if ($looksLikeAssignment($raw[$j])) {
+                    break;                      // a new KEY=value inside the "value": it was a typo
+                }
                 $joined .= "\n" . $raw[$j];
                 if (env_open_quote($joined) === null) {
                     $line = $joined;

@@ -102,6 +102,11 @@ error instead of silently storing plaintext.
 - **`${NAME}` in values.** CodeIgniter 4's loader expands `${NAME}` inside any quotes and has no
   escape, so such a value can change when the app reads the file. The .env Manager and the
   deploy/apply log warn (key names only); avoid `${` in secrets for CI4 projects.
+- **`.env` file permissions** are set by `ENV_FILE_MODE` in `config.php`. New installs get `0640`
+  (owner read/write, group read, nothing for other users). An install whose `config.php` predates
+  the constant keeps `0644`, because tightening it automatically could cut off a web server that
+  runs as a different user than the deployer (for example deploys started over SSH). Add
+  `define('ENV_FILE_MODE', 0640);` to opt in once you've confirmed the app can still read `.env`.
 - **Apply now runs a stored command** (`projects.env_apply_cmd`) through `HookRunner`, with the
   same privileges and timeout as deploy hooks. It is set from the authenticated, CSRF-protected
   .env Manager page only. Treat it as equivalent to a deploy hook.

@@ -199,9 +199,9 @@ class DeployService
 
             // ---- Step 7b: Write managed .env -------------------------------
             if ($envManaged) {
-                // Mode 0640; Step 8 skips .env so the permission sweep leaves it alone.
+                // Mode from ENV_FILE_MODE; Step 8 skips .env so the permission sweep leaves it alone.
                 $written = EnvVar::writeToTarget($project);
-                DeploymentLog::info($deploymentId, "Wrote managed .env ({$written} variable(s), mode 0640) to target.");
+                DeploymentLog::info($deploymentId, "Wrote managed .env ({$written} variable(s), mode " . sprintf('%04o', env_file_mode()) . ") to target.");
                 if ($expansionWarning = EnvVar::expansionWarning((int) $project['id'])) {
                     DeploymentLog::warning($deploymentId, $expansionWarning);
                 }

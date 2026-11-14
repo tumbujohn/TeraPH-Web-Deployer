@@ -385,8 +385,9 @@ class EnvVar
     }
 
     /**
-     * Renders the managed .env and writes it to the target directory with mode
-     * 0640 (owner rw, group r, nothing for other users on a shared host).
+     * Renders the managed .env and writes it to the target directory with the
+     * mode from ENV_FILE_MODE (0640 on new installs: owner rw, group r, nothing for
+     * other users on a shared host; 0644 where the constant is not set).
      *
      * @return int Number of variables written
      * @throws RuntimeException if the file cannot be written
@@ -397,14 +398,16 @@ class EnvVar
         $content   = self::renderDotEnv($projectId, $project['env_template'] ?? null);
         $path      = self::targetEnvPath($project);
 
-        // umask makes a new file start restrictive; chmod covers one that already existed
-        $oldUmask = umask(0137);
+        // umask makes a new file start no more permissive than the mode; chmod covers
+        // one that already existed
+        $mode     = env_file_mode();
+        $oldUmask = umask(0777 & ~$mode);
         $written  = file_put_contents($path, $content);
         umask($oldUmask);
         if ($written === false) {
             throw new RuntimeException("Failed to write managed .env to: {$path}");
         }
-        @chmod($path, 0640);
+        @chmod($path, $mode);
 
         return count(self::allForProject($projectId));
     }

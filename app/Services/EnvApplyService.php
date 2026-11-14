@@ -49,7 +49,7 @@ class EnvApplyService
             EnvVar::assertDeployable($projectId);
 
             $count = EnvVar::writeToTarget($project);
-            DeploymentLog::info($deploymentId, "Wrote managed .env ({$count} variable(s), mode 0640) to target.");
+            DeploymentLog::info($deploymentId, "Wrote managed .env ({$count} variable(s), mode " . sprintf('%04o', env_file_mode()) . ") to target.");
             if ($expansionWarning = EnvVar::expansionWarning($projectId)) {
                 DeploymentLog::warning($deploymentId, $expansionWarning);
             }

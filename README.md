@@ -531,7 +531,8 @@ variables from the browser instead of hand-editing files on the server.
 - **Editing tools.** Filter keys, drag or ▲▼ to reorder (the template is reordered to
   match), bulk edit as `KEY=value` text, copy from another project, and passphrase-encrypted
   export/import for backups or moving between installs.
-- **Written with mode `0640`.** Values containing `${NAME}` raise a warning — CodeIgniter 4
+- **File mode is configurable** (`ENV_FILE_MODE`; `0640` on new installs, `0644` for installs whose
+  `config.php` predates it). Values containing `${NAME}` raise a warning — CodeIgniter 4
   expands those even inside quotes (see [docs/DECISIONS.md](docs/DECISIONS.md)).
 
 Set a dedicated encryption key before storing real values:
