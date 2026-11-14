@@ -27,6 +27,9 @@ graph TD
     C -->|writes| L[storage/logs/ + DB]
     M[public/terminal_execute.php] --> G
     N[public/env_manager.php] --> H
+    N --> O[EnvApplyService — apply without a deploy]
+    O --> H
+    O --> G
 ```
 
 Every public entry point calls `app_boot()` ([app/helpers.php](../app/helpers.php)), which
@@ -166,7 +169,8 @@ erDiagram
         TEXT post_deploy_hooks "JSON array"
         INTEGER terminal_enabled
         VARCHAR env_mode "none | managed"
-        TEXT env_template
+        TEXT env_template "structure only — values are scrubbed"
+        TEXT env_apply_cmd "command(s) run after Apply now"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
@@ -175,7 +179,7 @@ erDiagram
         INTEGER id PK
         INTEGER project_id FK
         VARCHAR status "pending|running|success|failed"
-        VARCHAR mode "safe | full"
+        VARCHAR mode "safe | full | restore | env_apply"
         VARCHAR triggered_by
         TIMESTAMP started_at
         TIMESTAMP finished_at

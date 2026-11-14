@@ -515,11 +515,24 @@ variables from the browser instead of hand-editing files on the server.
   fresh `.env` file to the target directory on every deploy from then on.
 - **Template + values.** Paste your `.env.example` (or a full `.env`) into the Template
   card, or click **Import from .env.example** to read one that already exists in the target
-  directory. Saving extracts every `KEY=value` line; keys are kept in sync automatically —
-  add a line, get a new field; remove a line, the stored value is deleted.
+  directory. Saving extracts every `KEY=value` line and keeps keys in sync — add a line, get
+  a new field; remove a line and you're asked whether to delete or keep the stored value.
+  The stored template holds structure only (keys, order, comments); values live encrypted.
 - **Values are encrypted at rest** (AES-256-GCM) and masked in the UI by default — never
   written to any deploy log.
-- **Required keys** halt the deploy before any files are touched if left empty.
+- **Preflight.** Before anything is downloaded, backed up or changed, a deploy stops if a
+  required key is empty or a stored value can't be decrypted. The release's `.env.example`
+  is compared with your managed keys and mismatches are logged as warnings.
+- **Live .env card.** Compares the `.env` on the server with what the manager would write
+  (key names only, never values), lets you **Apply now** (write it without a deploy, then
+  optionally run a stored command such as `php artisan config:cache`), and **Pull from live**
+  (import an existing site's current `.env` — nothing is deleted, and differing stored values
+  are confirmed first).
+- **Editing tools.** Filter keys, drag or ▲▼ to reorder (the template is reordered to
+  match), bulk edit as `KEY=value` text, copy from another project, and passphrase-encrypted
+  export/import for backups or moving between installs.
+- **Written with mode `0640`.** Values containing `${NAME}` raise a warning — CodeIgniter 4
+  expands those even inside quotes (see [docs/DECISIONS.md](docs/DECISIONS.md)).
 
 Set a dedicated encryption key before storing real values:
 
@@ -715,13 +728,16 @@ For each stuck deployment it prints the last log entry, marks the status `failed
 │       ├── FileManager.php        # File system operations
 │       ├── BackupService.php      # Zip backup and restore (deployer-aware)
 │       ├── HookRunner.php         # Pre/post hook execution, {composer} resolution
+│       ├── EnvApplyService.php    # "Apply now" — write the managed .env without a deploy
 │       └── DeployService.php      # 10-step deployment pipeline with self-protection
 │
 ├── migrations/                    # NOT web-accessible — additive-only, re-run every request
 │   ├── 001_initial_schema.php     # Core schema (projects, deployments, logs)
 │   ├── 002_manual_upload_support.php   # Manual upload source type
 │   ├── 003_project_hooks_terminal.php  # deploy_template, pre/post hooks, terminal_logs
-│   └── 004_project_env_manager.php     # env_mode, env_template, project_env_vars
+│   ├── 004_project_env_manager.php     # env_mode, env_template, project_env_vars
+│   ├── 005_env_apply_command.php       # projects.env_apply_cmd ("Apply now" command)
+│   └── 006_scrub_env_templates.php     # strips plaintext values from stored env templates
 │
 ├── public/                        # Web root — point your domain here
 │   ├── index.php                  # Dashboard (overlap badge, template form, terminal toolbar)
@@ -732,7 +748,7 @@ For each stuck deployment it prints the last log entry, marks the status `failed
 │   ├── projects.php               # AJAX project CRUD (template + hook fields)
 │   ├── settings.php               # General Settings page (read-only install overview)
 │   ├── settings_action.php        # AJAX: clear_tmp, deploy_reconcile
-│   ├── env_manager.php            # .env Manager — per-project template + encrypted values
+│   ├── env_manager.php            # .env Manager — template, encrypted values, live file tools, bulk tools
 │   ├── migrate.php                # Browser-based migration runner
 │   ├── update.php                 # Self-update from GitHub
 │   ├── terminal_execute.php       # Streaming terminal endpoint (audited, guarded)

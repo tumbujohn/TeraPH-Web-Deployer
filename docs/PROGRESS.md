@@ -4,8 +4,8 @@ Current implementation state of TeraPH Web Deployer, kept in sync with the codeb
 what's planned next, see [TODO.md](TODO.md). For why things were built this way, see
 [DECISIONS.md](DECISIONS.md).
 
-**Last updated:** 2026-08-16 (documentation pass — reconciled against `git log` through
-commit `5400dee`).
+**Last updated:** 2026-11-14 (documentation pass — reconciled against `git log` through
+commit `1444172`).
 
 ---
 
@@ -14,7 +14,8 @@ commit `5400dee`).
 The core deploy pipeline, project management, backups, logging, GitHub integration, and
 dashboard (SRS Phase 1 scope) are complete and in daily use. Beyond that original scope,
 four substantial feature sets have since shipped: manual zip-upload source, deploy
-hooks/templates, a web terminal, and a full per-project `.env` manager. The product is
+hooks/templates, a web terminal, and a full per-project `.env` manager (since extended with
+live-file tools and bulk editing). The product is
 pre-P0 on the [improvement plan](archive/improvement_plan.md)'s hardening tier — meaning
 atomic rollback, PAT encryption, and login throttling are not yet in place.
 
@@ -53,6 +54,18 @@ atomic rollback, PAT encryption, and login throttling are not yet in place.
 - [x] **Manual zip-upload source** (`source_type = manual`) as an alternative to GitHub
 - [x] **Per-project .env manager** — template/value split, AES-256-GCM encryption at rest,
       required-key validation, deploy-time rendering, masked preview
+- [x] **.env Manager live-file tools** — drift check against the server's `.env`, Apply now
+      (write without a deploy, optional stored command, recorded as an `env_apply`
+      deployment), Pull from live (never deletes; confirms before replacing values)
+- [x] **.env Manager editing tools** — key filter, drag/▲▼ reorder (reorders the template),
+      bulk edit as text, copy from another project, passphrase-encrypted export/import
+- [x] **.env safety hardening** — preflight before download/backup (empty required keys,
+      undecryptable values), release `.env.example` comparison, atomic template/key
+      operations, confirmation before dropping keys, structure-only templates (migration 006
+      scrubs older ones), multi-line value support, `${NAME}` warning for CI4, `0640` file mode
+- [x] **Optional backup `.env` encryption** (`BACKUP_ENCRYPT_ENV`, default off)
+- [x] **Backup restore layout fix** — `extract()` unwraps a folder only when it is the sole
+      archive entry; restore never unwraps
 - [x] **General Settings page** — install overview, storage stats, extension checks,
       one-click clear-tmp and deploy-reconcile actions
 - [x] **Project deletion refinement** — deleting a project now removes its `project_env_vars`

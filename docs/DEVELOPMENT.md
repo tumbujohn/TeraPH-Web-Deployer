@@ -115,7 +115,16 @@ completing work that touches the deploy pipeline, migrations, or auth:
    → check Logs → check Backups → restore.
 4. If you touched `safe_keep`/self-protection/env-manager logic, deploy twice in a row and
    confirm preserved paths and `.env` survive as expected.
-5. `php -l` every changed `.php` file at minimum if no broader lint is available.
+5. If you touched the .env Manager, also check: the Live .env chip reads *In sync* right after
+   **Apply now**; a required key left empty blocks both a deploy and an apply *before* the
+   target changes; **Pull from live** asks before replacing a differing stored value; saving
+   values keeps a multi-line value (e.g. a PEM key) intact; and flash messages appear.
+6. Do UI and data-changing checks on a **throwaway copy**, not your real install: copy
+   `app/`, `public/`, `migrations/` and a `config.php` with its own `DB_PATH` and
+   `SECRET_KEY` somewhere else, then `php -S 127.0.0.1:8099 -t public`. Check phone widths
+   (320–390px) as well as desktop — `docs/DESIGN.md` doesn't exist yet, so match the existing
+   pages' styling.
+7. `php -l` every changed `.php` file at minimum if no broader lint is available.
 
 ---
 
