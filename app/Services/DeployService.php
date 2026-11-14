@@ -197,6 +197,17 @@ class DeployService
                 }
             }
 
+            // ---- Step 7d: Framework runtime directories ---------------------
+            // Frameworks expect writable runtime folders that repositories usually
+            // don't contain (their contents are gitignored). With the default
+            // safe_keep (`storage/`) the repo's own skeleton is skipped too, so on a
+            // first deploy Laravel finds no storage/framework/views, realpath()
+            // returns false and every `php artisan ...` hook dies with "Please
+            // provide a valid cache path". Idempotent: only missing folders are made.
+            foreach ($this->ensureFrameworkDirs($project, $targetDir) as $created) {
+                DeploymentLog::info($deploymentId, "Framework: created missing directory {$created}");
+            }
+
             // ---- Step 7b: Write managed .env -------------------------------
             if ($envManaged) {
                 // Mode from ENV_FILE_MODE; Step 8 skips .env so the permission sweep leaves it alone.
@@ -280,6 +291,42 @@ class DeployService
     // =========================================================================
     // Private helpers
     // =========================================================================
+
+    /**
+     * Creates the runtime directories the project's framework expects but a repository
+     * normally lacks. The framework is recognised from the project's deploy template or,
+     * so hand-written hooks are covered too, from its files in the target directory.
+     *
+     * @return string[] Relative paths that were created (empty when everything existed)
+     */
+    private function ensureFrameworkDirs(array $project, string $targetDir): array
+    {
+        $root     = rtrim($targetDir, '/\\');
+        $template = (string) ($project['deploy_template'] ?? 'none');
+        $dirs     = [];
+
+        if ($template === 'laravel' || (is_file("{$root}/artisan") && is_file("{$root}/bootstrap/app.php"))) {
+            array_push(
+                $dirs,
+                'storage/app/public', 'storage/framework/cache/data', 'storage/framework/sessions',
+                'storage/framework/testing', 'storage/framework/views', 'storage/logs', 'bootstrap/cache'
+            );
+        }
+        if ($template === 'codeigniter' || (is_file("{$root}/spark") && is_dir("{$root}/app/Config"))) {
+            array_push($dirs, 'writable/cache', 'writable/logs', 'writable/session', 'writable/uploads');
+        }
+        if ($template === 'symfony' || (is_file("{$root}/bin/console") && is_file("{$root}/config/bundles.php"))) {
+            array_push($dirs, 'var/cache', 'var/log');
+        }
+
+        $created = [];
+        foreach ($dirs as $rel) {
+            if (!is_dir("{$root}/{$rel}") && @mkdir("{$root}/{$rel}", 0755, true)) {
+                $created[] = $rel;
+            }
+        }
+        return $created;
+    }
 
     /**
      * Removes orphaned/partial zip files from a previous aborted deployment

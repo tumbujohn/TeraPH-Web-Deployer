@@ -249,6 +249,7 @@ sequenceDiagram
     DeployService->>FileManager: 6. Clear target (respecting safe_keep + self-protection)
     DeployService->>FileManager: 7. Copy new files into target
     DeployService->>FileManager: 7c. Ensure safe-keep directories exist
+    DeployService->>FileManager: 7d. Ensure framework runtime directories exist (Laravel storage/, CI writable/, Symfony var/)
     DeployService->>EnvVar: 7b. Write managed .env (if env_mode = managed)
     DeployService->>HookRunner: 7a. Run pre_deploy_hooks
     DeployService->>FileManager: 8. Set permissions (755 dirs / 644 files)

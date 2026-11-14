@@ -876,6 +876,25 @@ through a small shim under `storage/tmp/phpbin/`).
 Note the PHP the application *needs* may differ from the one the site runs on, and a lock file can require a
 newer PHP than `composer.json` does (for example Symfony 8 packages need PHP 8.4.1+). `composer install` fails
 until the PHP the project uses satisfies the lock, so pick that PHP for the project.
+### Laravel: "Please provide a valid cache path"
+
+Symptom: a `php artisan …` hook (often `config:cache` or `view:cache`) fails with *"Please provide a valid
+cache path"*, with a stack trace through `Illuminate\View\Compilers\Compiler`.
+
+Cause: Laravel's `config/view.php` sets the compiled-views path to `realpath(storage_path('framework/views'))`,
+and `realpath()` returns `false` when that folder doesn't exist. By default `storage/` is a Safe-keep path, so
+on a first deploy the repository's own `storage/` skeleton is skipped and the target has no
+`storage/framework/views`.
+
+The deployer now creates the runtime folders a recognised framework needs before hooks run (deploy step 7d,
+logged as `Framework: created missing directory …`): Laravel's `storage/app/public`,
+`storage/framework/{cache/data,sessions,testing,views}`, `storage/logs` and `bootstrap/cache`; CodeIgniter's
+`writable/{cache,logs,session,uploads}`; Symfony's `var/{cache,log}`. The framework is recognised from the
+project's Deploy Template or from its files, so hand-written hooks are covered. Only missing folders are created.
+
+On a deployer that predates this, create them once from the terminal and redeploy:
+`mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache`
+
 ### Terminal command times out
 
 Increase `TERMINAL_TIMEOUT` in `config.php`:

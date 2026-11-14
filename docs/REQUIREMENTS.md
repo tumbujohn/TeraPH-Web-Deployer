@@ -67,6 +67,7 @@ functions. There is no multi-user role model — see §5.
 | ID | Requirement |
 | --- | --- |
 | REQ-F-040 | **Safe mode** (default): preserves `safe_keep` paths (default `.env`, `uploads/`, `storage/`, `writable/`) — only application code is replaced. |
+| REQ-F-044 | Before hooks run, the deploy creates the runtime directories the project's framework expects when they are missing — Laravel `storage/app/public`, `storage/framework/{cache/data,sessions,testing,views}`, `storage/logs`, `bootstrap/cache`; CodeIgniter `writable/{cache,logs,session,uploads}`; Symfony `var/{cache,log}` — recognising the framework from the deploy template or from its files (`artisan`+`bootstrap/app.php`, `spark`+`app/Config`, `bin/console`+`config/bundles.php`). Existing directories and their contents are never touched, and each creation is logged. |
 | REQ-F-041 | **Full mode**: clears the entire target directory with no exclusions except self-protection. The UI must warn explicitly before a Full deploy proceeds. |
 
 ### 2.5 Backup & Restore
