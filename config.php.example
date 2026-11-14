@@ -53,6 +53,13 @@ define('BACKUP_ENCRYPT_ENV', false);
 // keep the older 0644 behavior.
 define('ENV_FILE_MODE', 0640);
 
+// PHP CLI binary used by deploy hooks and the web terminal (composer, php artisan, ...). Leave empty to use
+// whatever `php` the web server's PATH finds. Set it when that is a different (often older) PHP than your
+// site runs on — typical on cPanel, where the default CLI PHP is not the domain's MultiPHP version. The
+// Settings page shows which PHP hooks use and suggests a value. The directory must contain a file named `php`.
+// Examples: '/opt/cpanel/ea-php84/root/usr/bin/php'   '/opt/alt/php84/usr/bin/php'   '/usr/local/php84/bin/php'
+define('CLI_PHP_PATH', '');
+
 // ---- Deploy Strategy ----
 // 'auto'    → detect symlink capability on first deploy and cache the result
 // 'symlink' → force symlink mode (requires webroot to point at target/current)

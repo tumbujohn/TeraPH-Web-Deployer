@@ -62,7 +62,7 @@ session. There is no router; each `.php` file under `public/` is its own endpoin
 │       ├── GitHubService.php      # cURL zip/API download with PAT support
 │       ├── FileManager.php        # extract / copyContents / clear / setPermissions
 │       ├── BackupService.php      # Zip backup + restore (deployer-aware, symlink-aware)
-│       ├── HookRunner.php         # proc_open command execution, {composer} resolution
+│       ├── HookRunner.php         # proc_open command execution, {composer} resolution, CLI_PHP_PATH
 │       ├── EnvApplyService.php    # "Apply now": write the managed .env without a deploy
 │       └── DeployService.php      # Deployment pipeline orchestrator
 │

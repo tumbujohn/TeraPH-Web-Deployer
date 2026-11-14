@@ -38,6 +38,12 @@ Priority tiers follow the original roadmap naming: **P0** (correctness & safety)
       minimum PHP version and extensions, checked against the host); on any failure or a failed
       post-update bootstrap check, restore the pre-update zip automatically; refuse to start
       while a deployment is running; optionally a short maintenance flag during the swap.
+      Also: call `opcache_reset()` and `clearstatcache()` after applying (without it, opcache can
+      serve a mix of old and new files for `opcache.revalidate_freq` seconds, or indefinitely where
+      `validate_timestamps=0` — verified by updating real historical installs), and handle replacing
+      its own running file (Windows locks it: the copy fails, leaving `public/update.php`, `tera`
+      and `scripts/` missing and no way to retry from the UI) — e.g. copy it last under a temporary
+      name and rename, or finish the swap in a second request.
 - [ ] **Secure session cookie flag.** Set `cookie_secure => !DEV_MODE` alongside the
       existing `cookie_httponly`/`cookie_samesite` in `app_boot()`.
 - [ ] **P0.1 — Atomic symlink-based releases.** `DEPLOY_STRATEGY` and

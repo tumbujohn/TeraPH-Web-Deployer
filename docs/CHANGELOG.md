@@ -18,10 +18,15 @@ automatically on the next page load. Things worth knowing:
   empty or a stored value that cannot be decrypted (for example after `SECRET_KEY` changed). Previously such a
   deploy silently wrote an empty value.
 - **Stored templates are scrubbed** of plaintext values by migration 006. The deployed `.env` does not change.
-- **Known limitation:** the self-updater still clears files before copying the new ones and is not atomic
-  (see `docs/TODO.md`). Take the backup it offers, and avoid updating during a deployment.
+- **Self-updater limitations** (unchanged; see `docs/TODO.md`). It clears files before copying the new ones
+  and is not atomic. PHP's opcache can serve a mix of old and new files for a few seconds after an update
+  (`opcache.revalidate_freq`, 2s by default), so the first requests may error briefly; on hosts with
+  `opcache.validate_timestamps=0` it lasts until PHP is restarted or opcache is reset. On a Windows host the
+  updater cannot replace its own running script and stops half-way. Take the backup it offers, update when no
+  deployment is running, and give it a minute before judging the result.
 
 ### Added
+- `CLI_PHP_PATH` config option: the PHP CLI that hooks and the terminal use (its directory goes first on `PATH`; `{composer}` uses it). Fixes `composer install` failing platform checks because the web server's `PATH` finds an older default `php` than the site's. Unset = unchanged behavior. Settings → PHP Environment now shows the PHP hooks actually run, flags a mismatch with the web PHP, and suggests a value
 - `BACKUP_ENCRYPT_ENV` config option (default `false`) to AES-256 password-protect `.env` files inside backup zips; restore decrypts transparently
 - `ENV_FILE_MODE` config option for the managed `.env` permissions (see upgrade notes)
 - .env Manager **Live .env** card: drift check against the server's `.env` (key names only), **Apply now** (write the `.env` without a deploy, optionally run a stored command; recorded as an `env_apply` deployment) and **Pull from live** (import the target's current `.env`; never deletes; asks before replacing differing stored values)

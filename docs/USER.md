@@ -212,6 +212,7 @@ Two one-click maintenance actions are available there:
 | Deployment stuck at "⟳ Deploying" | Ask your administrator to run `php tera deploy:reconcile`, or use the equivalent action on the Settings page, then reload. |
 | No result after clicking Deploy | The dashboard always re-checks real status from the server — reload if unsure. Check the Logs modal for the pipeline's last recorded step. |
 | 404 downloading from a private GitHub repo | Usually an expired or misscoped PAT. Re-check the PAT setup in §3. |
+| Composer says my PHP version is too old, but Settings and SSH show a newer one | Hooks and the terminal use the `php` on the *web server's* PATH, which can differ. Check **Settings → PHP for hooks & terminal**; your administrator can set `CLI_PHP_PATH` in `config.php` (the page suggests a value). See the README troubleshooting entry. |
 | A pre/post-deploy hook says "command not found" | Use `{composer}` instead of `composer` directly, or use the terminal's **↓ composer.phar** button. |
 | Terminal command times out | Ask your administrator to raise the terminal/hook timeout in server config. |
 | Target directory doesn't exist | Create it on the server first, or double-check the Target Directory field for typos. |

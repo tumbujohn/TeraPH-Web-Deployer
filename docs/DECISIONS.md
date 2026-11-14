@@ -246,6 +246,28 @@ change the deployed code, still counts.
 
 ---
 
+## Hooks Use an Explicit PHP CLI Setting, Not Auto-Detection
+
+**Context:** Hooks and the terminal run through `proc_open` with the web server's environment, so a bare
+`php` is whatever the web server's `PATH` finds — on cPanel typically the host's default CLI PHP, not the
+domain's MultiPHP version. Composer then fails platform checks even though the Settings page (the web PHP)
+and an SSH login (a different `PATH`) both show a newer version.
+
+**Decision:** `CLI_PHP_PATH` in `config.php` names the PHP CLI binary; `HookRunner` puts its directory first on
+`PATH` for every command and uses it for `{composer}`. Unset means the previous behavior. The Settings page
+shows the PHP version hooks actually get, warns on a major.minor mismatch with the web PHP, and suggests the
+web PHP's own CLI (`HookRunner::webPhpCli()`) as the value.
+
+**Alternatives considered:** Auto-switching to the web PHP's CLI — rejected: it silently changes which PHP
+every existing instance's hooks use, and the *target* application's PHP need not equal the deployer's own
+(they may be separate domains with separate PHP versions). A per-project setting — deferred: needs a schema
+change and UI, and one global value covers the common case.
+
+**Consequences:** One global value for all projects; a project needing a different PHP can still call a
+binary explicitly in its hooks. An invalid path is ignored (flagged on Settings), not fatal.
+
+---
+
 *Record new significant decisions here as they're made — architecture, technology,
 product, security, or UX. Include context, the decision, alternatives considered, and
 consequences.*

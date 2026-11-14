@@ -116,6 +116,7 @@ functions. There is no multi-user role model — see §5.
 | REQ-F-091 | Terminal commands stream stdout/stderr to the browser in real time via `proc_open`. |
 | REQ-F-092 | A shortcut toolbar provides one-click common commands and a "download composer.phar" action with SHA-256 verification. |
 | REQ-F-093 | Commands are subject to `TERMINAL_TIMEOUT` (default 600s). |
+| REQ-F-094 | Hooks and the terminal run the PHP CLI named by `CLI_PHP_PATH` when it is set (its directory is placed first on `PATH`, and `{composer}` uses it); when unset or not an executable file they use whatever `php` the web server's `PATH` finds, exactly as before. The Settings page shows the PHP version hooks actually get, flags a major.minor difference from the PHP serving the page, and suggests the site's own CLI binary. |
 
 ### 2.10 .env Manager
 

@@ -14,6 +14,15 @@ $deployerRoot    = defined('DEPLOYER_ROOT') ? DEPLOYER_ROOT : dirname(__DIR__);
 
 // ---- PHP environment -------------------------------------------------------
 $phpVersionOk = version_compare(PHP_VERSION, '8.1.0', '>=');
+
+// PHP used by deploy hooks and the terminal vs the PHP serving this page. They can differ: commands inherit
+// the web server's PATH, whose `php` is often the host's default CLI rather than this site's version.
+$cliPhpConfigured = defined('CLI_PHP_PATH') ? trim((string) CLI_PHP_PATH) : '';
+$cliPhpBinary     = HookRunner::cliPhp();                              // null = use `php` from PATH
+$cliPhpVersion    = HookRunner::phpVersionOf($cliPhpBinary ?? 'php');  // what a hook's `php` really is
+$mmOf             = fn(?string $v): ?string => ($v !== null && preg_match('/^(\d+\.\d+)/', $v, $m)) ? $m[1] : null;
+$cliPhpMismatch   = $cliPhpVersion !== null && $mmOf($cliPhpVersion) !== PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+$cliPhpSuggestion = ($cliPhpMismatch && $cliPhpBinary === null) ? HookRunner::webPhpCli() : null;   // this site's own CLI
 $dbExt        = DB_DRIVER === 'mysql' ? 'pdo_mysql' : 'pdo_sqlite';
 $extChecks    = ['zip', 'curl', 'pdo', $dbExt];
 
@@ -154,7 +163,36 @@ $csrfToken = csrf_token();
                             <span class="badge badge-danger" style="margin-left:6px;">Requires 8.1+</span>
                         <?php endif; ?>
                     </dd>
+                    <dt>PHP for hooks &amp; terminal</dt>
+                    <dd>
+                        <?php if ($cliPhpVersion !== null): ?>
+                            <?= h($cliPhpVersion) ?>
+                            <span class="badge <?= $cliPhpMismatch ? 'badge-danger' : 'badge-success' ?>" style="margin-left:6px;">
+                                <?= $cliPhpMismatch ? 'differs' : 'matches' ?>
+                            </span>
+                            <br><span style="font-size:11px; opacity:.7;">
+                                <?= $cliPhpBinary !== null ? h($cliPhpBinary) . ' (CLI_PHP_PATH)' : '<code>php</code> from the web server\'s PATH' ?>
+                            </span>
+                        <?php else: ?>
+                            <span style="opacity:.7;">unknown (could not run <code>php</code> — is <code>proc_open</code> disabled?)</span>
+                        <?php endif; ?>
+                    </dd>
                 </dl>
+                <?php if ($cliPhpConfigured !== '' && $cliPhpBinary === null): ?>
+                    <div style="background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.3); border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:12px; color:#f87171; line-height:1.6;">
+                        <strong>CLI_PHP_PATH is set but not usable:</strong> <code><?= h($cliPhpConfigured) ?></code> is not an
+                        executable file, so hooks and the terminal are falling back to <code>php</code> from PATH.
+                    </div>
+                <?php elseif ($cliPhpMismatch): ?>
+                    <div style="background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.3); border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:12px; color:#fbbf24; line-height:1.6;">
+                        <strong>Hooks and the terminal run PHP <?= h($cliPhpVersion) ?>, but this site runs PHP <?= h(PHP_VERSION) ?>.</strong>
+                        Composer and <code>php artisan</code> in your hooks use the first. If your project needs PHP
+                        <?= h(PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION) ?>, set <code>CLI_PHP_PATH</code> in <code>config.php</code>
+                        to that PHP's CLI binary<?php if ($cliPhpSuggestion !== null): ?>, for example:
+                        <br><code>define('CLI_PHP_PATH', '<?= h($cliPhpSuggestion) ?>');</code><?php else: ?>
+                        (find it over SSH with <code>which -a php</code> or in your host's PHP selector).<?php endif; ?>
+                    </div>
+                <?php endif; ?>
                 <div class="ext-list">
                     <?php foreach ($extChecks as $ext): ?>
                         <?php $loaded = extension_loaded($ext); ?>
