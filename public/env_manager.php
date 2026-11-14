@@ -141,20 +141,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $project) {
 
     // ---- Scrub plaintext values out of the stored template ------------------
     // Older versions kept pasted text, values included, in projects.env_template.
-    // Any value not yet stored is saved (encrypted) first, so nothing is lost.
+    // (Migration 006 does this automatically; this is the manual fallback.) What is
+    // deployed does not change: see EnvVar::scrubTemplate().
     if ($postAction === 'scrub_template') {
-        $tpl      = (string) ($project['env_template'] ?? '');
-        $incoming = [];
-        foreach (env_parse_pairs($tpl) as $k => $v) {
-            if ($v !== '') {
-                $incoming[] = ['key' => (string) $k, 'value' => $v];
-            }
-        }
-        EnvVar::transaction(function () use ($projectId, $tpl, $incoming): void {
-            EnvVar::merge($projectId, $incoming, $tpl, null, false);
-            EnvVar::setTemplate($projectId, (string) (Project::find($projectId)['env_template'] ?? ''));
-        });
-        flash('success', 'Template scrubbed — it no longer contains any values.');
+        $saved = EnvVar::scrubTemplate($projectId);
+        flash('success', 'Template scrubbed — it no longer contains any values.'
+            . ($saved ? ' Saved from the template (encrypted): ' . implode(', ', $saved) . '.' : ''));
         header('Location: env_manager.php?project_id=' . $projectId);
         exit;
     }
@@ -380,6 +372,7 @@ $liveChip         = match ($live['state'] ?? 'no_file') {
 $targetExists     = $project && is_dir($project['target_path']);
 $templateHasValues = $project && ($project['env_template'] ?? '') !== '' && env_template_has_values((string) $project['env_template']);
 $otherProjects    = array_values(array_filter($projects, fn($p) => (int) $p['id'] !== $projectId));
+$expansion        = $project ? EnvVar::expansionRisks($projectId) : [];
 $exampleExists = $project &&
     file_exists(rtrim($project['target_path'], '/\\') . DIRECTORY_SEPARATOR . '.env.example');
 
@@ -577,12 +570,26 @@ $exampleExists = $project &&
             </div>
         <?php else: ?>
 
+        <?php if (!empty($expansion)): ?>
+        <div class="warn-banner">
+            <strong>Some values may be changed when the app reads the .env.</strong>
+            <code><?= h(implode(', ', array_column($expansion, 'key'))) ?></code>
+            contain a <code>${NAME}</code> reference. CodeIgniter 4's loader expands these even inside quotes
+            (phpdotenv does not, because they are written single-quoted), and there is no way to escape them.
+            <?php $certain = array_column(array_filter($expansion, fn($r) => $r['definite']), 'key'); ?>
+            <?php if (!empty($certain)): ?>
+                <br>Certain to change — they reference another managed key: <code><?= h(implode(', ', $certain)) ?></code>.
+            <?php endif; ?>
+            If this project runs on CodeIgniter 4, avoid <code>${</code> in those values.
+        </div>
+        <?php endif; ?>
+
         <?php if ($templateHasValues): ?>
         <div class="warn-banner">
             <strong>The stored template still contains values in plaintext.</strong>
             Earlier versions kept pasted text, values included, in the project's template
-            (unencrypted in the database). Scrubbing removes them from the template; any that
-            aren't stored yet are saved encrypted first, so nothing is lost.
+            (unencrypted in the database). Scrubbing removes them; anything the template alone
+            supplied is saved encrypted first, so the deployed file does not change.
             <form method="post" class="btn-row">
                 <?= $csrfField ?>
                 <input type="hidden" name="form_action" value="scrub_template">

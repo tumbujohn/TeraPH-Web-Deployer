@@ -13,7 +13,8 @@ tagged releases yet — entries are grouped by date. Format loosely follows
 - .env Manager **Live .env** card: drift check against the server's `.env` (key names only), **Apply now** (write the `.env` without a deploy, optionally run a stored command; recorded as an `env_apply` deployment), and **Pull from live** (import the target's current `.env`; never deletes; asks before replacing differing stored values)
 - .env Manager editing tools: filter keys, drag/▲▼ reorder (also reorders the template), bulk edit as `KEY=value` text, copy from another project, and passphrase-encrypted export/import
 - Migration 005 adds `projects.env_apply_cmd`
-- One-click scrub for templates saved by earlier versions that still hold plaintext values
+- Migration 006 scrubs plaintext values out of templates saved by earlier versions automatically (the one-click banner remains as a fallback); the deployed `.env` is unchanged because only values the template alone supplied are saved first
+- Warning when a value contains `${NAME}`: shown in the .env Manager and logged on deploy/apply, because CodeIgniter 4's loader expands it inside any quotes and cannot be told not to
 
 - Env preflight: managed-env deploys now fail before the download/backup/target changes if a required key is empty or a stored value cannot be decrypted
 - Deploy log compares the release's `.env.example` with managed keys and warns about unmanaged or empty keys
@@ -22,6 +23,8 @@ tagged releases yet — entries are grouped by date. Format loosely follows
 - Env Manager asks before dropping keys: a template save or `.env.example` import that would remove existing keys now shows what would be deleted (and which hold values) and offers remove or keep
 
 ### Fixed
+- Backup restore (and any extraction) unwrapped an archive that had exactly one top-level folder even when files sat beside it, so restoring such a backup lost the top-level files and `.env`; a wrapper is now stripped only when it is the sole entry, and restore never strips
+- Topbar overflowed phone viewports by ~20px (brand name wrapped, action buttons ran off-screen) on every page
 - The .env Manager never displayed its flash messages (the page consumed them before rendering), so errors such as "Key already exists" were silent
 - Values containing line breaks (e.g. PEM keys) were flattened by the single-line value field and corrupted on the next save; they are now shown escaped (`\n`) and decoded on save, and multi-line quoted values in imported text parse as one entry instead of producing junk keys
 - The stored env template kept pasted values in plaintext and re-saving it could overwrite newer values with stale ones; values are now scrubbed from the template on every save

@@ -82,7 +82,8 @@ class BackupService
         // ignore it, and backups made while BACKUP_ENCRYPT_ENV was on still
         // restore after it is turned off.
         $extractDir = TMP_PATH . '/' . $project['name'] . '_restore_' . date('YmdHis');
-        $extracted  = $fileManager->extract($backupPath, $extractDir, backup_zip_password());
+        // stripWrapper = false: a backup is the exact target layout, never a GitHub-style wrapper
+        $extracted  = $fileManager->extract($backupPath, $extractDir, backup_zip_password(), false);
 
         // Clear target directory, then copy the backup into it
         $fileManager->clear($targetDir);

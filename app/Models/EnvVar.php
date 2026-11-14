@@ -634,6 +634,96 @@ class EnvVar
     }
 
     /**
+     * Removes values from the stored template without changing what gets deployed.
+     *
+     * A stored value always wins when rendering (even an empty one), so a template
+     * value only ever reached the file for a key with NO stored row. Exactly those
+     * are saved as stored values first; rows that already exist are left alone, so
+     * a value someone cleared on purpose is not resurrected from stale template text.
+     *
+     * @return string[] Keys saved from the template
+     */
+    public static function scrubTemplate(int $projectId): array
+    {
+        $pdo  = Database::connect();
+        $stmt = $pdo->prepare("SELECT env_template FROM projects WHERE id = ?");
+        $stmt->execute([$projectId]);
+        $tpl = (string) ($stmt->fetchColumn() ?: '');
+        if ($tpl === '') {
+            return [];
+        }
+
+        return self::transaction(function () use ($projectId, $tpl): array {
+            $existing = [];
+            $maxOrder = -1;
+            foreach (self::allForProject($projectId) as $v) {
+                $existing[(string) $v['key_name']] = true;
+                $maxOrder = max($maxOrder, (int) $v['sort_order']);
+            }
+
+            $added = [];
+            foreach (env_parse_pairs($tpl) as $key => $value) {
+                $key = (string) $key;
+                if ($value !== '' && !isset($existing[$key]) && self::validKey($key)) {
+                    self::upsert($projectId, $key, $value, null, ++$maxOrder);
+                    $added[] = $key;
+                }
+            }
+            self::setTemplate($projectId, $tpl);   // blanks every value
+            return $added;
+        });
+    }
+
+    /**
+     * Keys whose value contains a ${NAME} reference. phpdotenv ignores these (they are
+     * written single-quoted) but CodeIgniter 4's loader expands them inside ANY quotes
+     * and has no escape, so the value may change when the app reads the file.
+     * `definite` = the reference names another managed key, so it will expand.
+     * Key names only — nothing from the value is returned.
+     *
+     * @return array<int, array{key:string, definite:bool}>
+     */
+    public static function expansionRisks(int $projectId): array
+    {
+        $vars  = self::allForProject($projectId);
+        $names = [];
+        foreach ($vars as $v) {
+            $names[(string) $v['key_name']] = true;
+        }
+
+        $risks = [];
+        foreach ($vars as $v) {
+            if ($v['decrypt_failed'] || !preg_match_all('/\$\{([a-zA-Z0-9_.]+)\}/', $v['value'], $m)) {
+                continue;
+            }
+            $risks[] = [
+                'key'      => (string) $v['key_name'],
+                'definite' => (bool) array_intersect_key(array_flip($m[1]), $names),
+            ];
+        }
+        return $risks;
+    }
+
+    /**
+     * One-line warning for deploy/apply logs, or null when nothing is at risk.
+     */
+    public static function expansionWarning(int $projectId): ?string
+    {
+        $risks = self::expansionRisks($projectId);
+        if (empty($risks)) {
+            return null;
+        }
+        $msg = "Value(s) contain \${NAME} references that CodeIgniter 4's .env loader expands even inside quotes "
+             . '(phpdotenv leaves them alone), so they may change when the app reads the file: '
+             . implode(', ', array_column($risks, 'key')) . '.';
+        $definite = array_column(array_filter($risks, fn(array $r) => $r['definite']), 'key');
+        if (!empty($definite)) {
+            $msg .= ' Certain to change (they reference another managed key): ' . implode(', ', $definite) . '.';
+        }
+        return $msg;
+    }
+
+    /**
      * Same key rule the add/rename forms enforce.
      */
     public static function validKey(string $key): bool

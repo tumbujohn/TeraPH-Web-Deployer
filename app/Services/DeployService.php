@@ -202,6 +202,9 @@ class DeployService
                 // Mode 0640; Step 8 skips .env so the permission sweep leaves it alone.
                 $written = EnvVar::writeToTarget($project);
                 DeploymentLog::info($deploymentId, "Wrote managed .env ({$written} variable(s), mode 0640) to target.");
+                if ($expansionWarning = EnvVar::expansionWarning((int) $project['id'])) {
+                    DeploymentLog::warning($deploymentId, $expansionWarning);
+                }
             }
 
             // ---- Step 7a: Run pre-deploy hooks -----------------------------

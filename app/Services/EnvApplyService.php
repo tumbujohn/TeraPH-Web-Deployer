@@ -50,6 +50,9 @@ class EnvApplyService
 
             $count = EnvVar::writeToTarget($project);
             DeploymentLog::info($deploymentId, "Wrote managed .env ({$count} variable(s), mode 0640) to target.");
+            if ($expansionWarning = EnvVar::expansionWarning($projectId)) {
+                DeploymentLog::warning($deploymentId, $expansionWarning);
+            }
 
             $commands = $runCommand ? $this->commandsFor($project) : [];
             if ($runCommand) {

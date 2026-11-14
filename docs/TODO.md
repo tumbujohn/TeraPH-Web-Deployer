@@ -30,13 +30,6 @@ Priority tiers follow the original roadmap naming: **P0** (correctness & safety)
       new `login_attempts` table); lock out after N failures within a window.
 - [ ] **Secure session cookie flag.** Set `cookie_secure => !DEV_MODE` alongside the
       existing `cookie_httponly`/`cookie_samesite` in `app_boot()`.
-- [ ] **Backup restore drops top-level files when the archive has one top-level directory.**
-      `FileManager::extract()` strips a GitHub-style wrapper folder whenever
-      `glob($destDir . '/*', GLOB_ONLYDIR)` finds exactly one directory, ignoring top-level
-      files. A backup of a target with one top-level dir plus files (e.g. `app/`, `index.php`,
-      `.env`) therefore restores only that directory's contents. Fix: strip the wrapper only
-      when the directory is the *sole* entry in the archive, or give `extract()` a flag so
-      `BackupService::restore()` never strips.
 - [ ] **P0.1 — Atomic symlink-based releases.** `DEPLOY_STRATEGY` and
       `detect_deploy_strategy()` exist but the pipeline never branches on the result —
       `DeployService` always calls `FileManager::clear()`/`copyContents()` in place. Needs a
@@ -74,6 +67,9 @@ Priority tiers follow the original roadmap naming: **P0** (correctness & safety)
 
 ## Technical Debt — ENG
 
+- [ ] **Settings page overflows horizontally on phones** (~44px at 320px wide, ~4px at 360px):
+      `.settings-card` content (long paths in `<dd>`) is wider than the viewport. The topbar
+      overflow was fixed separately; this is the page's own layout.
 - [ ] **Automated test suite (PHPUnit).** Cover `FileManager` skip-path/symlink logic,
       `GitHubService` URL parsing, `HookRunner`, `EnvVar` template sync, and pipeline
       happy/failure paths. `test/bootstrap_test.php` is a manual diagnostic only today.

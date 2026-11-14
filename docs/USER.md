@@ -178,6 +178,10 @@ environment variables from the browser instead of editing files by hand.
 
 > Values containing line breaks (like a private key) show their line breaks as `\n` in the
 > masked field; edit with care or use Bulk edit.
+
+> If a value contains `${SOMETHING}`, a warning appears: CodeIgniter 4 expands that text when
+> it reads the `.env`, even inside quotes, so the value may change. Avoid `${` in secrets for
+> CodeIgniter 4 projects.
 Values are stored encrypted and are never written to any deploy log.
 
 > If your administrator hasn't set a dedicated encryption key on the server, you'll see a

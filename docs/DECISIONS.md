@@ -198,7 +198,9 @@ expansion it prevents.
 has no escape, so a value referencing a variable that is defined there cannot be written
 safely for CI4. (2) A `${` value that also contains `'`, a backslash or a newline can't be
 single-quoted and phpdotenv may still expand it. Both are rare; avoid `${` in secrets for
-CI4 projects.
+CI4 projects. Because the writer cannot make these safe, it detects them instead: the .env
+Manager shows a warning and deploy/apply log one (key names only; a reference to another
+managed key is marked certain to change). It never blocks a deploy.
 
 ---
 
@@ -217,8 +219,11 @@ and the editor needs it readable. Scrubbing only in the UI — rejected, every w
 (import, pull, copy, bundle) must be safe.
 
 **Consequences:** Defaults in a pasted `.env.example` are still imported as values, but no longer
-visible in the template textarea. Existing templates keep their plaintext until scrubbed (banner +
-one click) — they are not rewritten silently.
+visible in the template textarea. Existing templates are scrubbed by migration 006 on the next
+page load. The scrub is deliberately behavior-preserving: a stored value always beats the
+template when rendering (even an empty one), so only values for keys with *no* stored row are
+saved first — filling empty rows would resurrect values someone cleared on purpose. The manual
+banner remains as a fallback if the migration ever fails.
 
 ---
 

@@ -14,10 +14,12 @@ class FileManager
      * @param  string $zipPath  Path to the zip archive
      * @param  string $destDir  Destination directory (will be created if not exists)
      * @param  string|null $password  Password for encrypted entries (ignored by unencrypted ones)
+     * @param  bool        $stripWrapper  Unwrap a single top-level folder (GitHub archives). Pass false
+     *                                 for archives whose layout is exact, such as backups.
      * @return string  Absolute path to the extracted content directory
      * @throws RuntimeException on extraction failure
      */
-    public function extract(string $zipPath, string $destDir, ?string $password = null): string
+    public function extract(string $zipPath, string $destDir, ?string $password = null, bool $stripWrapper = true): string
     {
         if (!is_dir($destDir) && !mkdir($destDir, 0755, true)) {
             throw new RuntimeException("Cannot create extraction directory: {$destDir}");
@@ -40,10 +42,14 @@ class FileManager
         }
         $zip->close();
 
-        // Strip top-level wrapper folder GitHub adds (repo-branchname/)
-        $contents = glob($destDir . '/*', GLOB_ONLYDIR);
-        if (count($contents) === 1) {
-            return $contents[0];
+        // Strip the top-level wrapper folder GitHub adds (repo-branchname/) — but only
+        // when it is the SOLE entry. Counting directories alone (and ignoring dotfiles)
+        // wrongly unwrapped archives with one folder plus files beside it.
+        if ($stripWrapper) {
+            $entries = array_values(array_diff(scandir($destDir) ?: [], ['.', '..']));
+            if (count($entries) === 1 && is_dir($destDir . '/' . $entries[0])) {
+                return $destDir . '/' . $entries[0];
+            }
         }
 
         return $destDir;

@@ -96,9 +96,12 @@ error instead of silently storing plaintext.
 ### .env Manager: template, apply command, bundles
 
 - **The stored template holds no values.** `projects.env_template` is scrubbed on every save, so
-  secrets exist only encrypted. Templates saved by older versions may still contain plaintext
-  values; the .env Manager shows a banner with a one-click scrub. Until scrubbed, those values
-  sit unencrypted in the database.
+  secrets exist only encrypted. Templates saved by older versions are scrubbed automatically by
+  migration 006 on the next page load (without changing the deployed file); the .env Manager
+  keeps a manual "Scrub template now" banner as a fallback should that migration ever fail.
+- **`${NAME}` in values.** CodeIgniter 4's loader expands `${NAME}` inside any quotes and has no
+  escape, so such a value can change when the app reads the file. The .env Manager and the
+  deploy/apply log warn (key names only); avoid `${` in secrets for CI4 projects.
 - **Apply now runs a stored command** (`projects.env_apply_cmd`) through `HookRunner`, with the
   same privileges and timeout as deploy hooks. It is set from the authenticated, CSRF-protected
   .env Manager page only. Treat it as equivalent to a deploy hook.

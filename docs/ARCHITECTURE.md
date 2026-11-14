@@ -68,7 +68,8 @@ session. There is no router; each `.php` file under `public/` is its own endpoin
 │   ├── 002_manual_upload_support.php
 │   ├── 003_project_hooks_terminal.php
 │   ├── 004_project_env_manager.php
-│   └── 005_env_apply_command.php
+│   ├── 005_env_apply_command.php
+│   └── 006_scrub_env_templates.php
 │
 ├── public/                        # Web root — point your domain here
 │   ├── index.php                  # Dashboard: project list, deploy modal, project form
@@ -323,7 +324,8 @@ Per-project managed environment variables ([app/Models/EnvVar.php](../app/Models
 - **Never logged.** Deploy log entries never contain env values; the in-UI preview masks
   all non-empty values.
 - **Stored template is structure only.** `EnvVar::setTemplate()` blanks every value
-  (`env_template_scrub()`), so secrets live only encrypted in `project_env_vars`.
+  (`env_template_scrub()`), so secrets live only encrypted in `project_env_vars`. Migration 006
+  applies the same to older templates via `EnvVar::scrubTemplate()`.
 - **Shared write/preflight.** `EnvVar::assertDeployable()` (no unreadable or empty-required
   values) and `EnvVar::writeToTarget()` (render + `0640` write) are used by both the deploy
   pipeline and `EnvApplyService`, so the two cannot drift apart.
@@ -370,8 +372,10 @@ Composer abort.
 [app/Services/FileManager.php](../app/Services/FileManager.php) is the only class that
 touches the filesystem for deploy/backup/restore operations.
 
-- **`extract()`** — strips the single top-level wrapper folder GitHub zips add
-  (`repo-branch/`) so the deployed structure matches the repo root.
+- **`extract()`** — strips the top-level wrapper folder GitHub zips add (`repo-branch/`) so the
+  deployed structure matches the repo root, but only when that folder is the sole entry
+  (`scandir`, so dotfiles count). Callers with an exact layout — backup restore — pass
+  `$stripWrapper = false`.
 - **`copyContents()` / `clear()` / `setPermissions()`** all take a `$skipPaths` array of
   paths relative to the root being operated on — the same list (safe_keep ∪
   self-protection) flows through all three so a path is either fully preserved or fully
