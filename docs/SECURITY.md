@@ -107,6 +107,11 @@ error instead of silently storing plaintext.
   the constant keeps `0644`, because tightening it automatically could cut off a web server that
   runs as a different user than the deployer (for example deploys started over SSH). Add
   `define('ENV_FILE_MODE', 0640);` to opt in once you've confirmed the app can still read `.env`.
+- **Required PHP extensions** are plain identifiers only (`[a-z0-9_]`; validated on save and again when
+  parsed), so an entry can never be a path, a flag or a shell fragment — it is written as `extension=<name>`
+  into a generated ini under `storage/tmp/phpini/` (not web-accessible) and resolved by PHP against its own
+  extension directory. The server's `php.ini` is never modified and the deployer never downloads or loads
+  native code; an extension either already exists for that PHP or it doesn't.
 - **PHP binary settings** (`CLI_PHP_PATH`, a project's *PHP for hooks & terminal*) choose which executable
   runs hook and terminal commands. The project field is editable from the authenticated, CSRF-protected
   project form and is validated on save and again at use: an absolute path to an existing executable file,

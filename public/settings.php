@@ -20,14 +20,28 @@ $phpVersionOk = version_compare(PHP_VERSION, '8.1.0', '>=');
 // version than the site runs on; by default the deployer now picks the site's own PHP CLI automatically.
 $phpSel      = HookRunner::resolvePhp();
 $phpWebCli   = HookRunner::webPhpCli();
-$phpForHooks = HookRunner::phpVersionOf($phpSel['binary'] ?? 'php');
+$phpProbe    = HookRunner::probe($phpSel['binary'] ?? 'php');          // version + loaded extensions of what hooks run
+$phpForHooks = $phpProbe['version'] ?? null;
 $phpWebMm    = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
 $phpMismatch = $phpForHooks !== null && !str_starts_with($phpForHooks, $phpWebMm . '.');
 $phpFound    = [];                                                   // binaries on this host => version (one `php -r` each)
 foreach (HookRunner::discoverPhpBinaries() as $phpBin) {
-    $phpFound[$phpBin] = HookRunner::phpVersionOf($phpBin);
+    $phpFound[$phpBin] = HookRunner::probe($phpBin);
 }
 $phpConfigured = defined('CLI_PHP_PATH') ? trim((string) CLI_PHP_PATH) : '';
+// Which database drivers a PHP has — the usual reason `php artisan migrate` says "could not find driver"
+$dbChips = function (?array $probe): string {
+    if ($probe === null) {
+        return '';
+    }
+    $out = '';
+    foreach (['pdo_mysql' => 'MySQL', 'pdo_pgsql' => 'PostgreSQL', 'pdo_sqlite' => 'SQLite'] as $ext => $label) {
+        $on   = in_array($ext, $probe['extensions'], true);
+        $out .= '<span class="badge ' . ($on ? 'badge-success' : 'badge-neutral') . '" style="margin:2px 4px 0 0; font-size:10px;'
+              . ($on ? '' : ' opacity:.55;') . '" title="' . h($ext) . ($on ? ' loaded' : ' not loaded') . '">' . h($label) . '</span>';
+    }
+    return $out;
+};
 $phpSourceHtml = match ($phpSel['source']) {
     'project' => 'project setting',
     'config'  => h((string) $phpSel['binary']) . ' (CLI_PHP_PATH)',
@@ -182,6 +196,7 @@ $csrfToken = csrf_token();
                                 <?= $phpMismatch ? 'differs' : 'matches' ?>
                             </span>
                             <br><span style="font-size:11px; opacity:.7;"><?= $phpSourceHtml ?></span>
+                            <br><?= $dbChips($phpProbe) ?>
                         <?php else: ?>
                             <span style="opacity:.7;">unknown (could not run <code>php</code> — is <code>proc_open</code> disabled?)</span>
                         <?php endif; ?>
@@ -212,11 +227,11 @@ $csrfToken = csrf_token();
                 <?php if (!empty($phpFound)): ?>
                     <p class="settings-section-title" style="margin-top:4px;">PHP binaries found on this host</p>
                     <div class="ext-list" style="margin-bottom:16px;">
-                        <?php foreach ($phpFound as $phpPath => $phpVer): ?>
+                        <?php foreach ($phpFound as $phpPath => $phpPr): ?>
                             <div class="ext-row">
-                                <span class="ext-name" style="word-break:break-all;"><?= h($phpPath) ?></span>
+                                <span class="ext-name" style="word-break:break-all;"><?= h($phpPath) ?><br><?= $dbChips($phpPr) ?></span>
                                 <span>
-                                    <?= $phpVer !== null ? h($phpVer) : '?' ?>
+                                    <?= ($phpPr['version'] ?? null) !== null ? h($phpPr['version']) : '?' ?>
                                     <?php if ($phpPath === $phpSel['binary']): ?><span class="badge badge-success" style="margin-left:6px;">in use</span><?php endif; ?>
                                 </span>
                             </div>

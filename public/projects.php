@@ -50,6 +50,7 @@ if ($action === 'create') {
 
     $id = Project::create($data);
     Project::setPhpBinary($id, $data['php_binary']);
+    Project::setPhpExtensions($id, $data['php_extensions']);
     
     // Handle manual archive upload if provided
     $uploadError = handleManualArchiveUpload($id);
@@ -89,6 +90,7 @@ if ($action === 'update') {
 
     Project::update($id, $data);
     Project::setPhpBinary($id, $data['php_binary']);
+    Project::setPhpExtensions($id, $data['php_extensions']);
 
     // Handle manual archive upload if provided (overwrites existing if any)
     $uploadError = handleManualArchiveUpload($id);
@@ -145,6 +147,8 @@ function sanitizeProjectInput(array $post): array
         'terminal_enabled'  => isset($post['terminal_enabled']) ? (int)(bool)$post['terminal_enabled'] : 1,
         'env_mode'          => trim($post['env_mode'] ?? '') === 'managed' ? 'managed' : 'none',
         'php_binary'        => trim($post['php_binary'] ?? '') ?: null,   // saved by Project::setPhpBinary()
+        'php_extensions_raw' => trim($post['php_extensions'] ?? ''),        // validated below; saved normalised
+        'php_extensions'    => implode(', ', HookRunner::parseExtensions($post['php_extensions'] ?? '')) ?: null,
     ];
 }
 
@@ -168,6 +172,15 @@ function validateProjectInput(array $data): array
 
     if (empty($data['target_path'])) {
         $errors[] = 'Target path is required.';
+    }
+
+    if (($data['php_extensions_raw'] ?? '') !== '') {
+        foreach (preg_split('/[\s,;]+/', $data['php_extensions_raw'], -1, PREG_SPLIT_NO_EMPTY) ?: [] as $name) {
+            if (!preg_match('/^(ext-)?[A-Za-z0-9_]+$/', $name)) {
+                $errors[] = "PHP extension names may only contain letters, digits and underscores (got '{$name}').";
+                break;
+            }
+        }
     }
 
     if (!empty($data['php_binary']) && !HookRunner::usableBinary($data['php_binary'])) {

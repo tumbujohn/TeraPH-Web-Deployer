@@ -120,7 +120,7 @@ $descriptorspec = [
     2 => ['pipe', 'w'],
 ];
 
-$process = proc_open($shellCmd, $descriptorspec, $pipes, $cwd, HookRunner::buildEnv($project['php_binary'] ?? null));
+$process = proc_open($shellCmd, $descriptorspec, $pipes, $cwd, HookRunner::buildEnv($project['php_binary'] ?? null, HookRunner::parseExtensions($project['php_extensions'] ?? null)));
 
 if (!is_resource($process)) {
     echo "\n[ERROR] Failed to start process.\n";

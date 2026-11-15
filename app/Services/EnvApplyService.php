@@ -48,6 +48,15 @@ class EnvApplyService
         try {
             EnvVar::assertDeployable($projectId);
 
+            // The apply command runs in the hooks' PHP too: fail before writing anything if it lacks a needed extension
+            $phpExtensions = HookRunner::parseExtensions($project['php_extensions'] ?? null);
+            if ($runCommand && $phpExtensions !== [] && $this->commandsFor($project) !== []) {
+                $extPlan = HookRunner::extensionPlan($project['php_binary'] ?? null, $phpExtensions);
+                if (!empty($extPlan['missing'])) {
+                    throw new RuntimeException($extPlan['message']);
+                }
+            }
+
             $count = EnvVar::writeToTarget($project);
             DeploymentLog::info($deploymentId, "Wrote managed .env ({$count} variable(s), mode " . sprintf('%04o', env_file_mode()) . ") to target.");
             if ($expansionWarning = EnvVar::expansionWarning($projectId)) {
@@ -70,7 +79,8 @@ class EnvApplyService
                                 DeploymentLog::info($deploymentId, $line);
                             }
                         },
-                        $project['php_binary'] ?? null
+                        $project['php_binary'] ?? null,
+                        $phpExtensions
                     );
                     if ($exit !== 0) {
                         throw new RuntimeException("Apply command failed with exit code {$exit}. The .env was written.");

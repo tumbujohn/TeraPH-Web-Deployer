@@ -31,6 +31,7 @@ Click **+ Add Project** and fill in:
 | **Pre/Post-Deploy Hooks** | Shell commands run automatically as part of every deploy — see §5. |
 | **Enable Terminal** | Whether the web terminal is available for this project. |
 | **PHP for hooks & terminal** | Optional. Absolute path of the PHP CLI that Composer and `php artisan` use for this project. Leave empty for the automatic choice (the PHP that runs the site); the field suggests the PHP binaries found on the server. |
+| **Required PHP extensions** | Optional. Extensions your hooks need, e.g. `pdo_pgsql, pgsql`. Checked before a deploy changes anything; enabled for hook runs if installed but switched off; otherwise the deploy stops with an explanation. |
 
 For **Manual Zip Upload** projects, upload a `.zip` of the application after saving — it's
 stored and reused for every deploy until you upload a new one.
@@ -214,6 +215,7 @@ Two one-click maintenance actions are available there:
 | No result after clicking Deploy | The dashboard always re-checks real status from the server — reload if unsure. Check the Logs modal for the pipeline's last recorded step. |
 | 404 downloading from a private GitHub repo | Usually an expired or misscoped PAT. Re-check the PAT setup in §3. |
 | Composer says my PHP version is too old, but Settings and SSH show a newer one | Hooks use the CLI PHP, which can differ from the PHP serving the site. The deployer now picks the site's own PHP automatically. **Settings → PHP for hooks & terminal** shows what hooks use and lists the PHP binaries on the server. To use a different one, set *PHP for hooks & terminal* in the project's settings (or your administrator sets `CLI_PHP_PATH`). Also check that the lock file doesn't need a newer PHP than the one chosen. See the README troubleshooting entry. |
+| A hook (`php artisan migrate`) fails with "could not find driver" | The PHP the hooks run lacks the database extension (e.g. `pdo_pgsql`). **Settings → PHP Environment** shows which PHP has which database drivers. Add the extension to the project's *Required PHP extensions* (it is enabled for hook runs if installed, otherwise the deploy stops cleanly before changing anything), choose a PHP that has it, or ask your host to enable it. See the README troubleshooting entry. |
 | A Laravel hook (`php artisan …`) fails with "Please provide a valid cache path" | The target had no `storage/framework/views` folder. The deployer now creates Laravel's (and CodeIgniter's and Symfony's) runtime folders automatically before hooks run. On an older deployer, run `mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache` in the terminal, then redeploy. |
 | A pre/post-deploy hook says "command not found" | Use `{composer}` instead of `composer` directly, or use the terminal's **↓ composer.phar** button. |
 | Terminal command times out | Ask your administrator to raise the terminal/hook timeout in server config. |

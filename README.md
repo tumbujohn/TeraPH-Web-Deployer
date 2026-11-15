@@ -876,6 +876,38 @@ through a small shim under `storage/tmp/phpbin/`).
 Note the PHP the application *needs* may differ from the one the site runs on, and a lock file can require a
 newer PHP than `composer.json` does (for example Symfony 8 packages need PHP 8.4.1+). `composer install` fails
 until the PHP the project uses satisfies the lock, so pick that PHP for the project.
+### Hook fails with "could not find driver" (`php artisan migrate`, PostgreSQL/MySQL)
+
+Symptom: `php artisan migrate --force` dies with `PDOException: could not find driver`, usually after Composer
+already succeeded. The deploy then stops *after* the new files are in place, with migrations not applied.
+
+Cause: the PHP that runs your hooks has no PDO driver for your database (`pdo_pgsql` for PostgreSQL, `pdo_mysql`
+for MySQL). Every PHP version on a multi-PHP host has its own `php.ini` and extension set, so the PHP your hooks
+run can lack an extension the site's web PHP has. **Settings → PHP Environment** now shows MySQL / PostgreSQL /
+SQLite chips for the PHP hooks use and for every PHP binary found, so you can see it without SSH.
+
+Fix, in order of preference:
+
+1. **List the extension on the project.** Edit the project and fill in *Required PHP extensions*, for example
+   `pdo_pgsql, pgsql`. Before a deploy changes anything, the deployer checks the PHP hooks will use:
+   - already loaded → nothing to do;
+   - **installed but switched off in that PHP's ini** → enabled for hook runs only (an extra ini directory via
+     `PHP_INI_SCAN_DIR` under `storage/tmp/phpini/`; the server's `php.ini` is never touched);
+   - not available → the deploy **stops before downloading or replacing anything**, with the real reason and
+     which other PHP binaries on the host do have it.
+2. **Ask your host to enable it** for that PHP version (on DirectAdmin, a CustomBuild option). This is the only
+   fix when the extension isn't installed for that PHP at all.
+3. **Select a PHP that has it** in the project's *PHP for hooks & terminal* — if its version satisfies your lock
+   file.
+4. **Use a self-contained PHP build** that bundles the extension (for example one made with
+   [static-php-cli](https://github.com/crazywhalecc/static-php-cli)) and select it as the project's PHP binary.
+   Build or download it from a source you trust and verify it (`php -m`, checksums) — the deployer never downloads
+   native code on its own. Static builds can't load further extensions, and PostgreSQL over SSL (required by Neon)
+   needs a build whose OpenSSL works with libpq, so test a real connection.
+
+Extensions are native code compiled for one exact PHP build (version, API number, thread safety), so a `.so`
+copied from another PHP or downloaded generically will not load.
+
 ### Laravel: "Please provide a valid cache path"
 
 Symptom: a `php artisan …` hook (often `config:cache` or `view:cache`) fails with *"Please provide a valid

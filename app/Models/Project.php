@@ -191,6 +191,18 @@ class Project
     }
 
     /**
+     * Sets (or clears) the PHP extensions this project's hooks need — a normalised,
+     * comma-separated list; see HookRunner::parseExtensions() / extensionPlan().
+     */
+    public static function setPhpExtensions(int $id, ?string $extensions): void
+    {
+        $extensions = trim((string) $extensions);
+        $pdo        = Database::connect();
+        $pdo->prepare("UPDATE projects SET php_extensions = ?, updated_at = ? WHERE id = ?")
+            ->execute([$extensions === '' ? null : $extensions, date('Y-m-d H:i:s'), $id]);
+    }
+
+    /**
      * Deletes a project by ID and all associated env vars.
      * Deployments and logs are retained for audit purposes.
      */

@@ -10,7 +10,7 @@ tagged releases yet — entries are grouped by date. Format loosely follows
 
 ### Upgrade notes
 Updating an existing install is safe with its old `config.php` and database; migrations 005 and 006 run
-automatically on the next page load (migration 007 as well, for the per-project PHP binary). Things worth knowing:
+automatically on the next page load (migrations 007 and 008 as well, for the per-project PHP binary and required extensions). Things worth knowing:
 - **Hooks may now run a different PHP than before.** If the `php` on your web server's `PATH` was a different
   version than the one running the site, hooks, Apply now and the terminal now use the site's own PHP. This is
   the intended fix for Composer version errors; if a project depended on the other PHP, set its own *PHP for
@@ -30,6 +30,7 @@ automatically on the next page load (migration 007 as well, for the per-project 
   deployment is running, and give it a minute before judging the result.
 
 ### Added
+- **Required PHP extensions per project.** `php artisan migrate` could die with "could not find driver" *after* the new files were in place, because the PHP hooks run (its own `php.ini`) lacked `pdo_pgsql`. A project can now list the extensions its hooks need; before a deploy changes anything the hooks' PHP is checked. An extension that is installed but switched off is enabled for hook, Apply-now and terminal runs only (extra ini directory via `PHP_INI_SCAN_DIR`; the server's `php.ini` is untouched); one that cannot be loaded fails the deploy up front with the real load error and the other PHP binaries on the host that have it. Settings shows MySQL / PostgreSQL / SQLite driver chips for the PHP hooks use and each PHP found. Migration 008 adds `projects.php_extensions`
 - **Automatic PHP for hooks and the terminal, with per-project choice.** Hooks and the terminal run as child processes of the web server, so a bare `php` followed the web server's `PATH` — often the host's default CLI, not the PHP the site runs on (Composer then failed platform checks while Settings and SSH showed a newer version). The deployer now uses the site's own PHP CLI automatically whenever `php` on `PATH` is a different version. Override per project (new *PHP for hooks & terminal* field, suggests the binaries found on the host) or globally with `CLI_PHP_PATH` (a path, or `'system'` for the old behavior). Settings shows which PHP hooks use and why, flags a mismatch and lists the PHP binaries on the host; deploy logs state it. Migration 007 adds `projects.php_binary`
 - `BACKUP_ENCRYPT_ENV` config option (default `false`) to AES-256 password-protect `.env` files inside backup zips; restore decrypts transparently
 - `ENV_FILE_MODE` config option for the managed `.env` permissions (see upgrade notes)

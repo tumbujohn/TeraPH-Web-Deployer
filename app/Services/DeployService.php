@@ -66,6 +66,29 @@ class DeployService
                 DeploymentLog::info($deploymentId, 'Env preflight passed.');
             }
 
+            // ---- Step 1c: PHP extensions the hooks need ----------------------
+            // Checked before anything is downloaded or replaced: a hook that dies on a
+            // missing extension (`php artisan migrate` -> "could not find driver")
+            // otherwise fails AFTER the new files are already in the target. Extensions
+            // that are installed but switched off in the hooks' PHP are enabled for hook
+            // runs only (see HookRunner::extensionPlan()).
+            $phpExtensions = HookRunner::parseExtensions($project['php_extensions'] ?? null);
+            if (!empty($phpExtensions)) {
+                $extPlan = HookRunner::extensionPlan($project['php_binary'] ?? null, $phpExtensions);
+                if (!empty($extPlan['missing'])) {
+                    throw new RuntimeException($extPlan['message']);
+                }
+                if ($extPlan['known']) {
+                    DeploymentLog::info(
+                        $deploymentId,
+                        'PHP extensions for hooks: ' . implode(', ', array_merge($extPlan['present'], $extPlan['enabled']))
+                        . (empty($extPlan['enabled'])
+                            ? ' (all loaded).'
+                            : " — enabled for hook runs only: " . implode(', ', $extPlan['enabled']) . " (installed, but off in that PHP's ini).")
+                    );
+                }
+            }
+
             // ---- Step 2: Acquire zip archive -------------------------------
             if (isset($project['source_type']) && $project['source_type'] === 'manual') {
                 DeploymentLog::info($deploymentId, "Using saved manual upload archive...");
@@ -229,7 +252,7 @@ class DeployService
                     if ($line !== '') {
                         DeploymentLog::info($deploymentId, $line);
                     }
-                }, $project['php_binary'] ?? null);
+                }, $project['php_binary'] ?? null, $phpExtensions);
                 if ($exit !== 0) {
                     throw new RuntimeException("Pre-deploy hook failed with exit code {$exit}.");
                 }
@@ -252,7 +275,7 @@ class DeployService
                     if ($line !== '') {
                         DeploymentLog::info($deploymentId, $line);
                     }
-                }, $project['php_binary'] ?? null);
+                }, $project['php_binary'] ?? null, $phpExtensions);
                 if ($exit !== 0) {
                     throw new RuntimeException("Post-deploy hook failed with exit code {$exit}.");
                 }

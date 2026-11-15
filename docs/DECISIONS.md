@@ -295,6 +295,31 @@ deployer's own — that is what the per-project binary is for.
 
 ---
 
+## Missing PHP Extensions: Check First, Enable Per Run, Never Download
+
+**Context:** `php artisan migrate` died with "could not find driver" because the PHP that hooks run (a different
+version from the web PHP, with its own `php.ini`) had no `pdo_pgsql` — after the new files were already in the
+target. The question was whether the deployer could "work around" a missing extension the way it works around
+the wrong PHP binary.
+
+**Decision:** Projects declare the extensions their hooks need (`php_extensions`). Before any change, the chosen
+PHP is inspected (`HookRunner::extensionPlan()`). Installed-but-disabled extensions are enabled for hook,
+apply and terminal runs only, via a generated ini directory appended to `PHP_INI_SCAN_DIR` and verified by
+loading; anything else fails the deploy up front with the PHP's real load error and the other binaries on the
+host that have the extension.
+
+**Alternatives considered:** Downloading a prebuilt extension — rejected: an extension must match one exact PHP
+build (version, API number, thread safety, libpq), and fetching and loading unverified native code is a supply-chain
+risk the deployer should not take on. Editing the server's `php.ini` — rejected: outside the deployer's remit and
+affects the web PHP. Deriving requirements automatically from `.env` (`DB_CONNECTION`) or `composer.json` —
+deferred: Laravel apps often don't declare `pdo_pgsql`, and implicit requirements are surprising.
+
+**Consequences:** Where the extension isn't installed for that PHP at all, the deployer can only say so clearly and
+point at a PHP that has it; the fix is the host's (or a self-contained PHP build the operator trusts, selected as
+the project's PHP binary).
+
+---
+
 *Record new significant decisions here as they're made — architecture, technology,
 product, security, or UX. Include context, the decision, alternatives considered, and
 consequences.*

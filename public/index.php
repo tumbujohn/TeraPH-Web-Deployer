@@ -361,6 +361,15 @@ $csrf     = csrf_token();
                         Settings lists what was found.</small>
                 </div>
 
+                <div class="form-group">
+                    <label for="p-php-extensions">Required PHP extensions <span class="form-hint-inline">(optional)</span></label>
+                    <input type="text" id="p-php-extensions" name="php_extensions" class="form-control"
+                           autocomplete="off" spellcheck="false" placeholder="pdo_pgsql, pgsql">
+                    <small class="form-hint">Extensions this project's hooks need (e.g. <code>pdo_pgsql</code> when <code>php artisan migrate</code> talks
+                        to PostgreSQL). Before a deploy changes anything, the PHP the hooks use is checked for them. One that is installed but
+                        switched off is enabled for hook runs only; one that isn't available stops the deploy with a clear message.</small>
+                </div>
+
                 <div class="alert alert-danger" id="project-form-error" hidden></div>
             </form>
         </div>

@@ -73,7 +73,8 @@ session. There is no router; each `.php` file under `public/` is its own endpoin
 │   ├── 004_project_env_manager.php
 │   ├── 005_env_apply_command.php
 │   ├── 006_scrub_env_templates.php
-│   └── 007_project_php_binary.php
+│   ├── 007_project_php_binary.php
+│   └── 008_project_php_extensions.php
 │
 ├── public/                        # Web root — point your domain here
 │   ├── index.php                  # Dashboard: project list, deploy modal, project form
@@ -173,6 +174,7 @@ erDiagram
         TEXT env_template "structure only — values are scrubbed"
         TEXT env_apply_cmd "command(s) run after Apply now"
         TEXT php_binary "optional PHP CLI for this project's hooks/terminal"
+        TEXT php_extensions "PHP extensions the hooks need, checked before deploy"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }

@@ -223,6 +223,213 @@ class HookRunner
         return preg_match('/^\d+\.\d+\.\d+\S*$/', $out) ? $out : null;
     }
 
+    // =========================================================================
+    // PHP extensions that hooks need
+    // =========================================================================
+    // Each PHP version on a multi-PHP host has its own php.ini and extension set, so the
+    // PHP hooks run can lack an extension (pdo_pgsql, say) that the site's web PHP has —
+    // and `php artisan migrate` then dies with "could not find driver" after the new
+    // files are already in place. A project can list the extensions its hooks need;
+    // extensionPlan() checks the chosen PHP for them, and where an extension is installed
+    // but simply not enabled in that PHP's ini, enables it for hook runs only (an extra
+    // ini directory via PHP_INI_SCAN_DIR; the server's php.ini is never touched).
+    // =========================================================================
+
+    /**
+     * Normalises a user-entered extension list: "ext-pdo_pgsql, PGSQL pgsql" => [pdo_pgsql, pgsql].
+     * Names that are not plain identifiers are dropped.
+     *
+     * @return string[]
+     */
+    public static function parseExtensions(?string $list): array
+    {
+        $out = [];
+        foreach (preg_split('/[\s,;]+/', strtolower((string) $list), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $name) {
+            $name = (string) preg_replace('/^ext-/', '', $name);
+            if ($name !== '' && preg_match('/^[a-z0-9_]+$/', $name)) {
+                $out[$name] = $name;
+            }
+        }
+        return array_values($out);
+    }
+
+    /**
+     * What a PHP binary (or the bare `php` on PATH) reports about itself.
+     * Cached per command unless an explicit environment is given.
+     *
+     * @param  array<string,string>|null $env Environment to run it in (default: the web server's own)
+     * @return array{version: ?string, extensions: string[], extension_dir: ?string, scan_dir: ?string}|null
+     *         null when it can't be run (proc_open disabled, no such command, unexpected output)
+     */
+    public static function probe(?string $phpCommand = null, ?array $env = null): ?array
+    {
+        static $cache = [];
+        $command = $phpCommand ?? 'php';
+        if ($env === null && array_key_exists($command, $cache)) {
+            return $cache[$command];
+        }
+
+        $result = null;
+        if (function_exists('proc_open')) {
+            $code = PHP_OS_FAMILY === 'Windows'
+                ? '"echo PHP_VERSION,\'|\',implode(\',\',get_loaded_extensions()),\'|\',ini_get(\'extension_dir\'),\'|\',PHP_CONFIG_FILE_SCAN_DIR;"'
+                : '\'echo PHP_VERSION,"|",implode(",",get_loaded_extensions()),"|",ini_get("extension_dir"),"|",PHP_CONFIG_FILE_SCAN_DIR;\'';
+            $cmd  = (preg_match('/\s/', $command) ? escapeshellarg($command) : $command) . ' -r ' . $code;
+
+            $proc = @proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $env ?? self::baseEnv());
+            if (is_resource($proc)) {
+                $out = trim((string) stream_get_contents($pipes[1]));
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                proc_close($proc);
+
+                $parts = explode('|', $out, 4);
+                if (count($parts) === 4 && preg_match('/^\d+\.\d+\.\d+\S*$/', $parts[0])) {
+                    $result = [
+                        'version'       => $parts[0],
+                        'extensions'    => array_map('strtolower', array_filter(explode(',', $parts[1]))),
+                        'extension_dir' => $parts[2] !== '' ? $parts[2] : null,
+                        'scan_dir'      => $parts[3] !== '' ? $parts[3] : null,
+                    ];
+                }
+            }
+        }
+
+        if ($env === null) {
+            $cache[$command] = $result;
+        }
+        return $result;
+    }
+
+    /**
+     * Checks that the PHP hooks will run has the given extensions, enabling those that are
+     * installed but not switched on.
+     *
+     * @param  string|null $phpBinary Project's own PHP binary (see resolvePhp())
+     * @param  string[]    $required  Extension names (see parseExtensions())
+     * @return array{env: array<string,string>, present: string[], enabled: string[], missing: string[],
+     *               message: ?string, known: bool}
+     *         env     = environment additions that make the `enabled` ones load (merge into buildEnv())
+     *         known   = false when the PHP couldn't be inspected; nothing is blocked in that case
+     *         message = why `missing` extensions are unavailable and where to find them
+     */
+    public static function extensionPlan(?string $phpBinary, array $required): array
+    {
+        static $cache = [];
+        $binary = self::resolvePhp($phpBinary)['binary'];
+        $cmd    = $binary ?? 'php';
+        $key    = md5($cmd . '|' . implode(',', $required));
+        if (isset($cache[$key])) {
+            return $cache[$key];
+        }
+
+        $plan = ['env' => [], 'present' => [], 'enabled' => [], 'missing' => [], 'message' => null, 'known' => false];
+        $probe = $required === [] ? null : self::probe($cmd);
+        if ($probe === null) {
+            return $cache[$key] = $plan;
+        }
+        $plan['known'] = true;
+
+        $lacking = [];
+        foreach ($required as $ext) {
+            in_array($ext, $probe['extensions'], true) ? $plan['present'][] = $ext : $lacking[] = $ext;
+        }
+
+        if ($lacking !== []) {
+            // Try switching them on in an extra ini directory, then verify by actually loading them.
+            $base   = defined('TMP_PATH') ? TMP_PATH : sys_get_temp_dir();
+            $iniDir = rtrim($base, '/\\') . DIRECTORY_SEPARATOR . 'phpini' . DIRECTORY_SEPARATOR . substr(md5($cmd . '|' . implode(',', $lacking)), 0, 12);
+            @mkdir($iniDir, 0755, true);
+            $ini = "; Generated by TeraPH Web Deployer: extensions this project needs that the PHP's own ini does not enable.\n";
+            foreach ($lacking as $ext) {
+                $ini .= "extension={$ext}\n";
+            }
+            @file_put_contents($iniDir . DIRECTORY_SEPARATOR . 'zz-teraph-extensions.ini', $ini);
+
+            // PHP_INI_SCAN_DIR replaces the compiled-in scan dir, so keep the existing one(s) in the list
+            $existing = (string) (getenv('PHP_INI_SCAN_DIR') ?: ($probe['scan_dir'] ?? ''));
+            $env      = ['PHP_INI_SCAN_DIR' => implode(PATH_SEPARATOR, array_filter([$existing, $iniDir]))];
+
+            $after  = self::probe($cmd, array_merge(self::baseEnv(), $env));
+            $loaded = $after['extensions'] ?? [];
+            foreach ($lacking as $ext) {
+                in_array($ext, $loaded, true) ? $plan['enabled'][] = $ext : $plan['missing'][] = $ext;
+            }
+            if ($plan['enabled'] !== []) {
+                $plan['env'] = $env;
+            }
+        }
+
+        if ($plan['missing'] !== []) {
+            $plan['message'] = self::missingExtensionsMessage($cmd, $probe, $plan['missing']);
+        }
+        return $cache[$key] = $plan;
+    }
+
+    /**
+     * Human explanation for extensions that could not be made available: why loading failed,
+     * and which other PHP binaries on this host do have them.
+     *
+     * @param  string[] $missing
+     */
+    private static function missingExtensionsMessage(string $cmd, array $probe, array $missing): string
+    {
+        $self    = realpath($cmd) ?: $cmd;
+        $label   = $cmd . ' (PHP ' . $probe['version'] . ')';
+        $others  = self::discoverPhpBinaries();
+        $parts   = [];
+
+        foreach ($missing as $ext) {
+            $with = [];
+            foreach ($others as $other) {
+                if ((realpath($other) ?: $other) === $self) {
+                    continue;
+                }
+                $p = self::probe($other);
+                if ($p !== null && in_array($ext, $p['extensions'], true)) {
+                    $with[] = $other . ' (PHP ' . $p['version'] . ')';
+                }
+            }
+
+            $reason = self::loadError($cmd, $ext);
+            $msg    = "PHP extension '{$ext}' is not available to hooks — they run {$label}."
+                    . ($reason !== null ? " Loading it failed: {$reason}." : ' It is not enabled there and no loadable extension file was found.');
+            $msg   .= $with !== []
+                ? ' It IS available in: ' . implode(', ', $with) . '. Select one of those in the project settings (PHP for hooks & terminal), or ask your host to enable it for this PHP version.'
+                : ' No other PHP binary found on this host has it either; ask your host to install it for this PHP version, or point the project at a PHP build that includes it.';
+            $parts[] = $msg;
+        }
+        return implode(' ', $parts);
+    }
+
+    /**
+     * The warning PHP prints when asked to load an extension, e.g. "Unable to load dynamic
+     * library 'pdo_pgsql' (tried: …): cannot open shared object file" — or null if it loads.
+     */
+    private static function loadError(string $cmd, string $ext): ?string
+    {
+        if (!function_exists('proc_open')) {
+            return null;
+        }
+        $code = PHP_OS_FAMILY === 'Windows' ? '"echo 1;"' : "'echo 1;'";
+        $full = (preg_match('/\s/', $cmd) ? escapeshellarg($cmd) : $cmd) . ' -d extension=' . $ext . ' -r ' . $code;
+
+        $proc = @proc_open($full, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, self::baseEnv());
+        if (!is_resource($proc)) {
+            return null;
+        }
+        $out = stream_get_contents($pipes[1]) . "\n" . stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($proc);
+
+        foreach (preg_split('/\R/', $out) ?: [] as $line) {
+            if (preg_match('/(?:Warning|Fatal error|Notice):\s*(.+?)(?:\s+in\s+Unknown\s+on\s+line\s+\d+)?$/i', trim($line), $m)) {
+                return trim($m[1]);
+            }
+        }
+        return null;
+    }
     /**
      * Resolves the correct composer invocation for a given working directory.
      *
@@ -277,10 +484,12 @@ class HookRunner
      * Builds the environment array for proc_open: the inherited environment plus, when
      * resolvePhp() picks a binary, that PHP's directory first on PATH.
      *
-     * @param  string|null $phpBinary The project's own PHP binary, if it has one
+     * @param  string|null $phpBinary  The project's own PHP binary, if it has one
+     * @param  string[]    $extensions Extensions the project's hooks need; those installed but not enabled
+     *                                  in the chosen PHP's ini are enabled for these commands
      * @return array<string, string>
      */
-    public static function buildEnv(?string $phpBinary = null): array
+    public static function buildEnv(?string $phpBinary = null, array $extensions = []): array
     {
         $env = self::baseEnv();
 
@@ -294,6 +503,10 @@ class HookRunner
                 }
             }
             $env[$key] = self::pathDirFor($binary) . PATH_SEPARATOR . ($env[$key] ?? '');
+        }
+
+        if ($extensions !== []) {
+            $env = array_merge($env, self::extensionPlan($phpBinary, $extensions)['env']);
         }
 
         return $env;
@@ -339,7 +552,7 @@ class HookRunner
      * @param  callable $logger  fn(string $chunk): void — receives stdout/stderr output
      * @return int  Process exit code (0 = success)
      */
-    public function run(string $command, string $cwd, callable $logger, ?string $phpBinary = null): int
+    public function run(string $command, string $cwd, callable $logger, ?string $phpBinary = null, array $extensions = []): int
     {
         $command  = str_replace('{composer}', $this->resolveComposer($cwd, $phpBinary), $command);
         $shellCmd = PHP_OS_FAMILY === 'Windows'
@@ -352,7 +565,7 @@ class HookRunner
             2 => ['pipe', 'w'],
         ];
 
-        $process = proc_open($shellCmd, $descriptors, $pipes, $cwd, self::buildEnv($phpBinary));
+        $process = proc_open($shellCmd, $descriptors, $pipes, $cwd, self::buildEnv($phpBinary, $extensions));
 
         if (!is_resource($process)) {
             $logger('[ERROR] Failed to start process: ' . $command . "\n");
@@ -403,7 +616,7 @@ class HookRunner
      * @param  callable  $logger   fn(string $chunk): void
      * @return int  0 if all passed, first non-zero exit code otherwise
      */
-    public function runAll(array $commands, string $cwd, callable $logger, ?string $phpBinary = null): int
+    public function runAll(array $commands, string $cwd, callable $logger, ?string $phpBinary = null, array $extensions = []): int
     {
         foreach ($commands as $cmd) {
             $cmd = trim($cmd);
@@ -412,7 +625,7 @@ class HookRunner
             }
 
             $logger('$ ' . $cmd . "\n");
-            $exit = $this->run($cmd, $cwd, $logger, $phpBinary);
+            $exit = $this->run($cmd, $cwd, $logger, $phpBinary, $extensions);
 
             if ($exit !== 0) {
                 $logger('[ERROR] Command exited ' . $exit . ': ' . $cmd . "\n");
